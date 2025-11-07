@@ -38,6 +38,10 @@ class PeopleIndexPage(Page):
 
     class Meta:
         verbose_name = "People Index Page"
+        verbose_name_plural = "People Index Pages"
+
+    def __str__(self):
+        return self.title
 
     def get_people(self):
         """Returns queryset of live PersonPage objects, most recent first"""
@@ -182,6 +186,7 @@ class PersonPage(Page):
     search_fields = Page.search_fields + [
         index.SearchField("first_name"),
         index.SearchField("last_name"),
+        index.SearchField("full_name"),
         index.SearchField("introduction"),
         index.SearchField("body"),
     ]
@@ -189,6 +194,10 @@ class PersonPage(Page):
 
     class Meta:
         verbose_name = "Person Page"
+        verbose_name_plural = "Person Pages"
+
+    def get_absolute_url(self):
+        return self.get_url()
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
