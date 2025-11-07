@@ -1,2 +1,0 @@
-# People app management commands
-
