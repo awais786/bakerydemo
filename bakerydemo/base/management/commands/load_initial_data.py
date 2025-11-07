@@ -7,6 +7,7 @@ from django.core.management.base import BaseCommand
 from wagtail.models import Page, Site
 from wagtail.images.models import Image
 from bakerydemo.base.models import HomePage
+from bakerydemo.people.models import PeopleIndexPage, PersonPage
 
 
 class Command(BaseCommand):
@@ -26,8 +27,6 @@ class Command(BaseCommand):
 
     def _load_people_data(self):
         """Load people/team data."""
-        from bakerydemo.people.models import PeopleIndexPage, PersonPage
-
         # People data
         people_data = [
             {
@@ -69,73 +68,70 @@ class Command(BaseCommand):
             "thibaud-colas": "sprint_crew.jpg",
         }
 
-        try:
-            home_page = HomePage.objects.first()
-            if not home_page:
-                home_page = Page.objects.filter(depth=2).first()
-        except ImportError:
-            home_page = Page.objects.filter(depth=2).first()
-
+        # Get home page
+        home_page = HomePage.objects.first() or Page.objects.filter(depth=2).first()
         if not home_page:
             return
 
+        # Get or create People Index
         people_index = PeopleIndexPage.objects.first()
         if not people_index:
-            try:
-                people_index = PeopleIndexPage(
-                    title="Our Team",
-                    slug="team",
-                    introduction="Meet the amazing people who contribute to Wagtail CMS.",
-                    show_in_menus=True,
-                )
-                home_page.add_child(instance=people_index)
-                people_index.save_revision().publish()
-                # Refresh from database to get the correct state
-                people_index = PeopleIndexPage.objects.get(pk=people_index.pk)
-
-                # Move Our Team after Gallery in menu order
-                try:
-                    # Find Gallery page
-                    gallery_page = home_page.get_children().filter(title="Gallery").first()
-                    if gallery_page:
-                        # Move people_index to position after gallery
-                        people_index.move(gallery_page, pos='right')
-                        # Refresh again after move
-                        people_index = PeopleIndexPage.objects.get(pk=people_index.pk)
-                except Exception as e:
-                    # Refresh from database even if move failed
-                    people_index = PeopleIndexPage.objects.get(pk=people_index.pk)
-
-            except Exception as e:
+            people_index = self._create_people_index(home_page)
+            if not people_index:
                 return
         else:
-            if not people_index.show_in_menus:
-                people_index.show_in_menus = True
-                people_index.save_revision().publish()
-                # Refresh from database
-                people_index = PeopleIndexPage.objects.get(pk=people_index.pk)
+            self._ensure_people_index_setup(people_index, home_page)
 
-            # Ensure it's positioned after Gallery
-            try:
-                gallery_page = home_page.get_children().filter(title="Gallery").first()
-                if gallery_page and people_index.get_parent() == gallery_page.get_parent():
-                    # Check if people_index is not already after gallery
-                    if people_index.path < gallery_page.path or not people_index.path.startswith(gallery_page.path[:len(gallery_page.path)-4]):
-                        people_index.move(gallery_page, pos='right')
-                        people_index = PeopleIndexPage.objects.get(pk=people_index.pk)
-            except Exception:
-                pass
         # Create person pages
+        self._create_people_pages(people_data, image_mapping, people_index)
+
+    def _create_people_index(self, home_page):
+        """Create and position the People Index page."""
+        try:
+            people_index = PeopleIndexPage(
+                title="Our Team",
+                slug="team",
+                introduction="Meet the amazing people who contribute to Wagtail CMS.",
+                show_in_menus=True,
+            )
+            home_page.add_child(instance=people_index)
+            people_index.save_revision().publish()
+            people_index.refresh_from_db()
+
+            # Move after Gallery
+            gallery_page = home_page.get_children().filter(title="Gallery").first()
+            if gallery_page:
+                people_index.move(gallery_page, pos='right')
+                people_index.refresh_from_db()
+
+            return people_index
+        except Exception:
+            return None
+
+    def _ensure_people_index_setup(self, people_index, home_page):
+        """Ensure People Index is properly configured."""
+        people_index.show_in_menus = True
+        people_index.save_revision().publish()
+        people_index.refresh_from_db()
+
+        # Position after Gallery if needed
+        gallery_page = home_page.get_children().filter(title="Gallery").first()
+        if gallery_page and people_index.get_parent() == gallery_page.get_parent():
+            if people_index.path < gallery_page.path:
+                people_index.move(gallery_page, pos='right')
+                people_index.refresh_from_db()
+
+    def _create_people_pages(self, people_data, image_mapping, people_index):
+        """Create individual person pages."""
         for person_data in people_data:
             slug = f"{person_data['first_name']}-{person_data['last_name']}".lower()
-            full_name = f"{person_data['first_name']} {person_data['last_name']}"
 
             if PersonPage.objects.filter(slug=slug).exists():
                 continue
 
             try:
                 person_page = PersonPage(
-                    title=full_name,
+                    title=f"{person_data['first_name']} {person_data['last_name']}",
                     slug=slug,
                     first_name=person_data["first_name"],
                     last_name=person_data["last_name"],
@@ -150,21 +146,23 @@ class Command(BaseCommand):
                 if "bio" in person_data:
                     person_page.body = [("paragraph", person_data["bio"])]
 
-                image_name = image_mapping.get(slug)
-                if image_name:
-                    base_name = image_name.split(".")[0]
-                    image = Image.objects.filter(file__icontains=base_name).first()
-
-                    if image:
-                        person_page.profile_picture = image
+                # Assign profile picture
+                image = self._get_image(image_mapping.get(slug))
+                if image:
+                    person_page.profile_picture = image
 
                 people_index.add_child(instance=person_page)
                 person_page.save_revision().publish()
             except Exception:
-                pass  # Skip person if creation fails, continue with others
+                pass
 
-            except Exception as e:
-                print(f"  Error creating {full_name}: {e}")  # noqa: T201
+    def _get_image(self, image_name):
+        """Get image by filename."""
+        if not image_name:
+            return None
+
+        base_name = image_name.split(".")[0]
+        return Image.objects.filter(file__icontains=base_name).first()
 
     def handle(self, **options):
         fixtures_dir = os.path.join(settings.PROJECT_DIR, "base", "fixtures")
