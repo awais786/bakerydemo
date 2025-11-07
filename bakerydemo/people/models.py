@@ -3,7 +3,6 @@ from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from wagtail.models import Page
 from wagtail.fields import StreamField
 from wagtail.admin.panels import FieldPanel, MultiFieldPanel
-from wagtail.api import APIField
 from wagtail.search import index
 
 from bakerydemo.base.blocks import BaseStreamBlock
@@ -36,10 +35,6 @@ class PeopleIndexPage(Page):
     parent_page_types = ["base.HomePage", "wagtailcore.Page"]
     max_count = 1  # Only allow one People Index Page in the site
 
-    api_fields = [
-        APIField("introduction"),
-        APIField("image"),
-    ]
 
     class Meta:
         verbose_name = "People Index Page"
@@ -191,16 +186,6 @@ class PersonPage(Page):
         index.SearchField("body"),
     ]
 
-    api_fields = [
-        APIField("first_name"),
-        APIField("last_name"),
-        APIField("role"),
-        APIField("introduction"),
-        APIField("profile_picture"),
-        APIField("body"),
-        APIField("location"),
-        APIField("team"),
-    ]
 
     class Meta:
         verbose_name = "Person Page"
