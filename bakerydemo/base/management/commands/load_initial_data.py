@@ -6,6 +6,7 @@ from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from wagtail.models import Page, Site
 from wagtail.images.models import Image
+from bakerydemo.base.models import HomePage
 
 
 class Command(BaseCommand):
@@ -68,9 +69,7 @@ class Command(BaseCommand):
             "thibaud-colas": "sprint_crew.jpg",
         }
 
-        # Find home page
         try:
-            from bakerydemo.base.models import HomePage
             home_page = HomePage.objects.first()
             if not home_page:
                 home_page = Page.objects.filter(depth=2).first()
@@ -80,7 +79,6 @@ class Command(BaseCommand):
         if not home_page:
             return
 
-        # Create People Index if not exists
         people_index = PeopleIndexPage.objects.first()
         if not people_index:
             try:
@@ -152,14 +150,11 @@ class Command(BaseCommand):
                 if "bio" in person_data:
                     person_page.body = [("paragraph", person_data["bio"])]
 
-                # Assign image
                 image_name = image_mapping.get(slug)
                 if image_name:
                     base_name = image_name.split(".")[0]
-                    image = (
-                        Image.objects.filter(file__icontains=base_name).first()
-                        or Image.objects.filter(title__icontains=base_name).first()
-                    )
+                    image = Image.objects.filter(file__icontains=base_name).first()
+
                     if image:
                         person_page.profile_picture = image
 
@@ -168,6 +163,8 @@ class Command(BaseCommand):
             except Exception:
                 pass  # Skip person if creation fails, continue with others
 
+            except Exception as e:
+                print(f"  Error creating {full_name}: {e}")  # noqa: T201
 
     def handle(self, **options):
         fixtures_dir = os.path.join(settings.PROJECT_DIR, "base", "fixtures")
@@ -187,9 +184,6 @@ class Command(BaseCommand):
         call_command("loaddata", fixture_file, verbosity=0)
         call_command("update_index", verbosity=0)
         call_command("rebuild_references_index", verbosity=0)
-
-        # Load people data
-        print("Loading people data...")  # noqa: T201
         self._load_people_data()
 
         print(  # noqa: T201
