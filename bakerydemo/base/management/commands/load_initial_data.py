@@ -92,6 +92,8 @@ class Command(BaseCommand):
                 )
                 home_page.add_child(instance=people_index)
                 people_index.save_revision().publish()
+                # Refresh from database to get the correct state
+                people_index = PeopleIndexPage.objects.get(pk=people_index.pk)
 
                 # Move Our Team after Gallery in menu order
                 try:
@@ -100,15 +102,20 @@ class Command(BaseCommand):
                     if gallery_page:
                         # Move people_index to position after gallery
                         people_index.move(gallery_page, pos='right')
-                except Exception:
-                    pass  # If Gallery doesn't exist or move fails, keep default position
+                        # Refresh again after move
+                        people_index = PeopleIndexPage.objects.get(pk=people_index.pk)
+                except Exception as e:
+                    # Refresh from database even if move failed
+                    people_index = PeopleIndexPage.objects.get(pk=people_index.pk)
 
-            except Exception:
+            except Exception as e:
                 return
         else:
             if not people_index.show_in_menus:
                 people_index.show_in_menus = True
                 people_index.save_revision().publish()
+                # Refresh from database
+                people_index = PeopleIndexPage.objects.get(pk=people_index.pk)
 
             # Ensure it's positioned after Gallery
             try:
@@ -117,19 +124,20 @@ class Command(BaseCommand):
                     # Check if people_index is not already after gallery
                     if people_index.path < gallery_page.path or not people_index.path.startswith(gallery_page.path[:len(gallery_page.path)-4]):
                         people_index.move(gallery_page, pos='right')
+                        people_index = PeopleIndexPage.objects.get(pk=people_index.pk)
             except Exception:
                 pass
-
         # Create person pages
         for person_data in people_data:
             slug = f"{person_data['first_name']}-{person_data['last_name']}".lower()
+            full_name = f"{person_data['first_name']} {person_data['last_name']}"
 
             if PersonPage.objects.filter(slug=slug).exists():
                 continue
 
             try:
                 person_page = PersonPage(
-                    title=f"{person_data['first_name']} {person_data['last_name']}",
+                    title=full_name,
                     slug=slug,
                     first_name=person_data["first_name"],
                     last_name=person_data["last_name"],

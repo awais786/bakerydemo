@@ -213,3 +213,10 @@ class PersonPage(Page):
         """Returns the person's full name"""
         return f"{self.first_name} {self.last_name}"
 
+    @property
+    def image(self):
+        """
+        Returns profile_picture for compatibility with listing-card template.
+        """
+        return self.profile_picture
+

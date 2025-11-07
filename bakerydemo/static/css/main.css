@@ -1177,6 +1177,24 @@ footer {
   }
 }
 
+/* ---- People Index Page ---- */
+.people-list {
+  list-style-type: none;
+  padding-left: 0;
+  padding-bottom: 40px;
+}
+
+@media (min-width: 992px) {
+  .people-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    padding-top: 30px;
+    padding-bottom: 80px;
+  }
+}
+
+
 /* ---- Bread Detail Page ---- */
 .bread-detail {
   padding-bottom: 60px;

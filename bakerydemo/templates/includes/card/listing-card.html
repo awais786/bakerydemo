@@ -13,7 +13,7 @@
             {% else %}
                 <h3 class="listing-card__title">{{ page.title }}</h3>
             {% endif %}
-            {% if page.origin or page.bread_type %}
+            {% if page.origin or page.bread_type or page.role or page.location or page.team %}
                 <table class="listing-card__meta">
                     {% if page.origin %}
                         <tr>
@@ -25,6 +25,24 @@
                         <tr>
                             <th scope="row" class="listing-card__meta-category">Type</th>
                             <td class="listing-card__meta-content">{{ page.bread_type }}</td>
+                        </tr>
+                    {% endif %}
+                    {% if page.role %}
+                        <tr>
+                            <th scope="row" class="listing-card__meta-category">Role</th>
+                            <td class="listing-card__meta-content">{{ page.role }}</td>
+                        </tr>
+                    {% endif %}
+                    {% if page.location %}
+                        <tr>
+                            <th scope="row" class="listing-card__meta-category">Location</th>
+                            <td class="listing-card__meta-content">{{ page.location }}</td>
+                        </tr>
+                    {% endif %}
+                    {% if page.team %}
+                        <tr>
+                            <th scope="row" class="listing-card__meta-category">Team</th>
+                            <td class="listing-card__meta-content">{{ page.get_team_display }}</td>
                         </tr>
                     {% endif %}
                 </table>
