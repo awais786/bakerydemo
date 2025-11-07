@@ -1,0 +1,41 @@
+{% load wagtailimages_tags %}
+
+<div class="listing-card">
+    <a class="listing-card__link" href="{{ page.url }}">
+        {% if page.profile_picture %}
+            <figure class="listing-card__image">
+                {% picture page.profile_picture format-{avif,webp,jpeg} fill-180x180-c100 loading="lazy" %}
+            </figure>
+        {% endif %}
+        <div class="listing-card__contents">
+            {% if h2 %}
+                <h2 class="listing-card__title">{{ page.title }}</h2>
+            {% else %}
+                <h3 class="listing-card__title">{{ page.title }}</h3>
+            {% endif %}
+            {% if page.role or page.location or page.team %}
+                <table class="listing-card__meta">
+                    {% if page.role %}
+                        <tr>
+                            <th scope="row" class="listing-card__meta-category">Role</th>
+                            <td class="listing-card__meta-content">{{ page.role }}</td>
+                        </tr>
+                    {% endif %}
+                    {% if page.location %}
+                        <tr>
+                            <th scope="row" class="listing-card__meta-category">Location</th>
+                            <td class="listing-card__meta-content">{{ page.location }}</td>
+                        </tr>
+                    {% endif %}
+                    {% if page.team %}
+                        <tr>
+                            <th scope="row" class="listing-card__meta-category">Team</th>
+                            <td class="listing-card__meta-content">{{ page.get_team_display|default:page.team }}</td>
+                        </tr>
+                    {% endif %}
+                </table>
+            {% endif %}
+        </div>
+    </a>
+</div>
+
