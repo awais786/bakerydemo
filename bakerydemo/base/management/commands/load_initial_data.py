@@ -69,19 +69,8 @@ class Command(BaseCommand):
         }
 
         # Get home page
-        home_page = HomePage.objects.first() or Page.objects.filter(depth=2).first()
-        if not home_page:
-            return
-
-        # Get or create People Index
-        people_index = PeopleIndexPage.objects.first()
-        if not people_index:
-            people_index = self._create_people_index(home_page)
-            if not people_index:
-                return
-        else:
-            self._ensure_people_index_setup(people_index, home_page)
-
+        home_page = HomePage.objects.first()
+        people_index = self._create_people_index(home_page)
         # Create person pages
         self._create_people_pages(people_data, image_mapping, people_index)
 
@@ -108,18 +97,6 @@ class Command(BaseCommand):
         except Exception:
             return None
 
-    def _ensure_people_index_setup(self, people_index, home_page):
-        """Ensure People Index is properly configured."""
-        people_index.show_in_menus = True
-        people_index.save_revision().publish()
-        people_index.refresh_from_db()
-
-        # Position after Gallery if needed
-        gallery_page = home_page.get_children().filter(title="Gallery").first()
-        if gallery_page and people_index.get_parent() == gallery_page.get_parent():
-            if people_index.path < gallery_page.path:
-                people_index.move(gallery_page, pos='right')
-                people_index.refresh_from_db()
 
     def _create_people_pages(self, people_data, image_mapping, people_index):
         """Create individual person pages."""
@@ -158,9 +135,6 @@ class Command(BaseCommand):
 
     def _get_image(self, image_name):
         """Get image by filename."""
-        if not image_name:
-            return None
-
         base_name = image_name.split(".")[0]
         return Image.objects.filter(file__icontains=base_name).first()
 
