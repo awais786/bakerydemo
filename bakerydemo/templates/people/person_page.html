@@ -29,7 +29,7 @@
                 </div>
 
                 <div class="col-md-4 col-md-offset-1">
-                    <div class="row">
+                    <div class="person-sidebar-content">
                         <div class="person-detail__meta">
                             {% if page.profile_picture %}
                                 <div class="person-detail__photo">
@@ -37,20 +37,19 @@
                                 </div>
                             {% endif %}
 
-                            {% if page.role %}
-                                <p class="person-detail__meta-title">Role</p>
-                                <p class="person-detail__meta-content">{{ page.role }}</p>
-                            {% endif %}
+                            <div class="person-detail__details">
+                                {% if page.role %}
+                                    <p><strong>Role:</strong> {{ page.role }}</p>
+                                {% endif %}
 
-                            {% if page.team %}
-                                <p class="person-detail__meta-title">Team</p>
-                                <p class="person-detail__meta-content">{{ page.team|capfirst }}</p>
-                            {% endif %}
+                                {% if page.team %}
+                                    <p><strong>Team:</strong> {{ page.get_team_display|default:page.team }}</p>
+                                {% endif %}
 
-                            {% if page.location %}
-                                <p class="person-detail__meta-title">Location</p>
-                                <p class="person-detail__meta-content">{{ page.location }}</p>
-                            {% endif %}
+                                {% if page.location %}
+                                    <p><strong>Location:</strong> {{ page.location }}</p>
+                                {% endif %}
+                            </div>
 
                             {# Social links #}
                             {% if page.email or page.website or page.github or page.twitter or page.linkedin %}
@@ -58,19 +57,18 @@
                                     <h4>Connect</h4>
                                     <ul class="list-unstyled">
                                         {% if page.email %}
-                                            <li><a href="mailto:{{ page.email }}">Email</a></li>
+                                            <li><a href="mailto:{{ page.email }}">✉️ Email</a></li>
                                         {% endif %}
                                         {% if page.website %}
-                                            <li><a href="{{ page.website }}" target="_blank" rel="noopener">Website</a></li>
+                                            <li><a href="{{ page.website }}" target="_blank" rel="noopener">🌐 Website</a></li>
                                         {% endif %}
                                         {% if page.github %}
-                                            <li><a href="https://github.com/{{ page.github }}" target="_blank" rel="noopener">GitHub</a></li>
+                                            <li><a href="https://github.com/{{ page.github }}" target="_blank" rel="noopener">💻 GitHub</a></li>
                                         {% endif %}
                                         {% if page.twitter %}
-                                            <li><a href="https://twitter.com/{{ page.twitter }}" target="_blank" rel="noopener">Twitter</a></li>
+                                            <li><a href="https://twitter.com/{{ page.twitter }}" target="_blank" rel="noopener">🐦 Twitter</a></li>
                                         {% endif %}
                                         {% if page.linkedin %}
-                                            <li><a href="{{ page.linkedin }}" target="_blank" rel="noopener">LinkedIn</a></li>
                                         {% endif %}
                                     </ul>
                                 </div>
