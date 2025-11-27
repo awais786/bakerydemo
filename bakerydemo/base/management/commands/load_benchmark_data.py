@@ -21,6 +21,13 @@ from bakerydemo.locations.models import LocationOperatingHours, LocationPage, Lo
 
 FIXTURE_MEDIA_DIR = Path(settings.PROJECT_DIR) / "base/fixtures/media/original_images"
 
+# Benchmark configuration constants
+STREAMFIELD_BLOCKS = 100
+STREAMFIELD_NESTING = 10
+INLINE_PANEL_ITEMS = 100
+RICH_TEXT_PARAGRAPHS = 100
+REVISIONS_PER_PAGE = 5
+
 
 class Command(BaseCommand):
     help = 'Load benchmark data for performance testing using existing content types'
@@ -42,93 +49,29 @@ class Command(BaseCommand):
             default=50,
             help='Number of bread pages to create (default: 50)'
         )
-        parser.add_argument(
-            '--location-pages',
-            type=int,
-            default=20,
-            help='Number of location pages to create (default: 20)'
-        )
-        parser.add_argument(
-            '--form-pages',
-            type=int,
-            default=0,
-            help='Number of form pages to create (default: 0)'
-        )
-        parser.add_argument(
-            '--revisions',
-            type=int,
-            default=5,
-            help='Number of revisions per page (default: 5)'
-        )
-        parser.add_argument(
-            '--streamfield-blocks',
-            type=int,
-            default=10,
-            help='Number of StreamField blocks per page (default: 10, max: 100)'
-        )
-        parser.add_argument(
-            '--streamfield-nesting',
-            type=int,
-            default=0,
-            help='Maximum nesting depth for StreamField blocks (default: 0, max: 10)'
-        )
-        parser.add_argument(
-            '--inline-panel-items',
-            type=int,
-            default=0,
-            help='Number of InlinePanel items to create per page (default: 0, max: 100)'
-        )
-        parser.add_argument(
-            '--rich-text-paragraphs',
-            type=int,
-            default=0,
-            help='Number of rich text paragraphs in StreamField (default: 0, max: 100)'
-        )
-        parser.add_argument(
-            '--preset',
-            type=str,
-            choices=['small', 'medium', 'large'],
-            help='Use a preset configuration (small: 100 pages, medium: 1000 pages, large: 10000 pages)'
-        )
 
     def handle(self, *args, **options):
-        # Handle presets
-        presets = {
-            'small': {'blog': 50, 'bread': 30, 'location': 20, 'form': 10, 'revisions': 5},
-            'medium': {'blog': 500, 'bread': 300, 'location': 200, 'form': 100, 'revisions': 10},
-            'large': {'blog': 5000, 'bread': 3000, 'location': 2000, 'form': 1000, 'revisions': 20},
+        blog_count = options['blog_pages']
+        bread_count = options['bread_pages']
+
+        # Content complexity settings - use constants
+        config = {
+            'streamfield_blocks': STREAMFIELD_BLOCKS,
+            'inline_panel_items': INLINE_PANEL_ITEMS,
+            'rich_text_paragraphs': RICH_TEXT_PARAGRAPHS,
+            'streamfield_nesting': STREAMFIELD_NESTING,
+            'revisions': REVISIONS_PER_PAGE,
         }
-
-        if options['preset']:
-            preset = presets[options['preset']]
-            blog_count = preset['blog']
-            bread_count = preset['bread']
-            location_count = preset['location']
-            form_count = preset['form']
-            revisions_count = preset['revisions']
-        else:
-            blog_count = options['blog_pages']
-            bread_count = options['bread_pages']
-            location_count = options['location_pages']
-            form_count = options['form_pages']
-            revisions_count = options['revisions']
-
-        # Content complexity settings
-        streamfield_blocks = min(options['streamfield_blocks'], 100)
-        inline_panel_items = min(options['inline_panel_items'], 100)
-        rich_text_paragraphs = min(options['rich_text_paragraphs'], 100)
-        streamfield_nesting = min(options['streamfield_nesting'], 10)
 
         self.stdout.write(self.style.SUCCESS('Starting benchmark data generation...'))
         self.stdout.write(
-            f'Target: {blog_count} blog pages, {bread_count} bread pages, '
-            f'{location_count} location pages, {form_count} form pages'
+            f'Target: {blog_count} blog pages, {bread_count} bread pages'
         )
-        self.stdout.write(f'Revisions per page: {revisions_count}')
-        self.stdout.write(f'StreamField blocks per page: {streamfield_blocks}')
-        self.stdout.write(f'StreamField nesting depth: {streamfield_nesting}')
-        self.stdout.write(f'InlinePanel items per page: {inline_panel_items}')
-        self.stdout.write(f'Rich text paragraphs: {rich_text_paragraphs}')
+        self.stdout.write(f'Revisions per page: {config["revisions"]}')
+        self.stdout.write(f'StreamField blocks per page: {config["streamfield_blocks"]}')
+        self.stdout.write(f'StreamField nesting depth: {config["streamfield_nesting"]}')
+        self.stdout.write(f'InlinePanel items per page: {config["inline_panel_items"]}')
+        self.stdout.write(f'Rich text paragraphs: {config["rich_text_paragraphs"]}')
 
         # Get the home page
         try:
@@ -140,37 +83,14 @@ class Command(BaseCommand):
         # Create blog pages
         if blog_count > 0:
             self.stdout.write('\nCreating blog pages...')
-            created = self.create_blog_pages(
-                home_page, blog_count, revisions_count,
-                streamfield_blocks, inline_panel_items, rich_text_paragraphs, streamfield_nesting
-            )
+            created = self.create_blog_pages(home_page, blog_count, config)
             self.stdout.write(self.style.SUCCESS(f'  ✓ Created {created} new blog pages'))
 
         # Create bread pages
         if bread_count > 0:
             self.stdout.write('\nCreating bread pages...')
-            created = self.create_bread_pages(
-                home_page, bread_count, revisions_count, streamfield_blocks, streamfield_nesting
-            )
+            created = self.create_bread_pages(home_page, bread_count, config)
             self.stdout.write(self.style.SUCCESS(f'  ✓ Created {created} new bread pages'))
-
-        # Create location pages
-        if location_count > 0:
-            self.stdout.write('\nCreating location pages...')
-            created = self.create_location_pages(
-                home_page, location_count, revisions_count,
-                streamfield_blocks, inline_panel_items, streamfield_nesting
-            )
-            self.stdout.write(self.style.SUCCESS(f'  ✓ Created {created} new location pages'))
-
-        # Create form pages
-        if form_count > 0:
-            self.stdout.write('\nCreating form pages...')
-            created = self.create_form_pages(
-                home_page, form_count, revisions_count,
-                streamfield_blocks, inline_panel_items, streamfield_nesting
-            )
-            self.stdout.write(self.style.SUCCESS(f'  ✓ Created {created} new form pages'))
 
         self.stdout.write(self.style.SUCCESS('\n✓ Benchmark data generation complete!'))
 
@@ -306,9 +226,13 @@ class Command(BaseCommand):
 
         return blocks
 
-    def create_blog_pages(self, home_page, count, revisions, streamfield_blocks, inline_panel_items,
-                          rich_text_paragraphs, streamfield_nesting):
+    def create_blog_pages(self, home_page, count, config):
         """Create blog pages using existing BlogPage model"""
+        revisions = config.get('revisions', REVISIONS_PER_PAGE)
+        streamfield_blocks = config.get('streamfield_blocks', STREAMFIELD_BLOCKS)
+        inline_panel_items = config.get('inline_panel_items', INLINE_PANEL_ITEMS)
+        rich_text_paragraphs = config.get('rich_text_paragraphs', RICH_TEXT_PARAGRAPHS)
+        streamfield_nesting = config.get('streamfield_nesting', STREAMFIELD_NESTING)
         blog_index = BlogIndexPage.objects.filter(slug='blog').first()
 
         if not blog_index:
@@ -411,8 +335,11 @@ class Command(BaseCommand):
 
         return created_count
 
-    def create_bread_pages(self, home_page, count, revisions, streamfield_blocks, streamfield_nesting):
+    def create_bread_pages(self, home_page, count, config):
         """Create bread pages using existing BreadPage model"""
+        revisions = config.get('revisions', REVISIONS_PER_PAGE)
+        streamfield_blocks = config.get('streamfield_blocks', STREAMFIELD_BLOCKS)
+        streamfield_nesting = config.get('streamfield_nesting', STREAMFIELD_NESTING)
         breads_index = BreadsIndexPage.objects.filter(slug='breads').first()
 
         if not breads_index:
@@ -521,9 +448,12 @@ class Command(BaseCommand):
 
         return created_count
 
-    def create_location_pages(self, home_page, count, revisions, streamfield_blocks, inline_panel_items,
-                              streamfield_nesting):
+    def create_location_pages(self, home_page, count, config):
         """Create location pages using existing LocationPage model"""
+        revisions = config.get('revisions', REVISIONS_PER_PAGE)
+        streamfield_blocks = config.get('streamfield_blocks', STREAMFIELD_BLOCKS)
+        inline_panel_items = config.get('inline_panel_items', INLINE_PANEL_ITEMS)
+        streamfield_nesting = config.get('streamfield_nesting', STREAMFIELD_NESTING)
         locations_index = LocationsIndexPage.objects.filter(slug='locations').first()
 
         if not locations_index:
@@ -625,9 +555,12 @@ class Command(BaseCommand):
 
         return created_count
 
-    def create_form_pages(self, home_page, count, revisions, streamfield_blocks, inline_panel_items,
-                          streamfield_nesting):
+    def create_form_pages(self, home_page, count, config):
         """Create form pages using existing FormPage model"""
+        revisions = config.get('revisions', REVISIONS_PER_PAGE)
+        streamfield_blocks = config.get('streamfield_blocks', STREAMFIELD_BLOCKS)
+        inline_panel_items = config.get('inline_panel_items', INLINE_PANEL_ITEMS)
+        streamfield_nesting = config.get('streamfield_nesting', STREAMFIELD_NESTING)
 
         # Find the highest existing form page number
         existing_pages = FormPage.objects.filter(title__startswith='Form Page')
