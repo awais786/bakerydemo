@@ -13,7 +13,7 @@ from wagtail.models import Site
 from wagtail.rich_text import RichText
 from willow.image import Image as WillowImage
 
-from bakerydemo.base.models import FormField, FormPage, HomePage, Person, StandardPage
+from bakerydemo.base.models import HomePage, Person
 from bakerydemo.blog.models import BlogIndexPage, BlogPage, BlogPersonRelationship
 from bakerydemo.breads.models import BreadIngredient, BreadPage, BreadsIndexPage, BreadType, Country
 from bakerydemo.locations.models import LocationOperatingHours, LocationPage, LocationsIndexPage
@@ -28,11 +28,9 @@ RICH_TEXT_PARAGRAPHS = 100
 REVISIONS_PER_PAGE = 5
 
 # Page count constants
-BLOG_PAGES = 200
-BREAD_PAGES = 200
-LOCATION_PAGES = 250
-FORM_PAGES = 0
-STANDARD_PAGES = 0
+BLOG_PAGES = 100
+BREAD_PAGES = 100
+LOCATION_PAGES = 50
 
 
 class Command(BaseCommand):
@@ -42,13 +40,10 @@ class Command(BaseCommand):
         blog_count = BLOG_PAGES
         bread_count = BREAD_PAGES
         location_count = LOCATION_PAGES
-        form_count = FORM_PAGES
-        standard_count = STANDARD_PAGES
 
         self.stdout.write('Starting benchmark data generation.')
         self.stdout.write(
-            f'Target: {blog_count} blog, {bread_count} bread, {location_count} location, '
-            f'{form_count} form, {standard_count} standard pages'
+            f'Target: {blog_count} blog, {bread_count} bread, {location_count} location pages'
         )
         self.stdout.write(f'Revisions per page: {REVISIONS_PER_PAGE}')
         self.stdout.write(f'StreamField blocks per page: {STREAMFIELD_BLOCKS}')
@@ -80,18 +75,6 @@ class Command(BaseCommand):
             self.stdout.write('Creating location pages...')
             created = self.create_location_pages(home_page, location_count)
             self.stdout.write(f'Created {created} new location pages')
-
-        # Create form pages
-        if form_count > 0:
-            self.stdout.write('Creating form pages...')
-            created = self.create_form_pages(home_page, form_count)
-            self.stdout.write(f'Created {created} new form pages')
-
-        # Create standard pages
-        if standard_count > 0:
-            self.stdout.write('Creating standard pages...')
-            created = self.create_standard_pages(home_page, standard_count)
-            self.stdout.write(f'Created {created} new standard pages')
 
         self.stdout.write('Benchmark data generation complete!')
 
@@ -454,15 +437,15 @@ class Command(BaseCommand):
         Uses consistent business hours for weekdays, with optional weekend closure.
         """
         days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
-        
+
         # Standard business hours (9am-5pm) for weekdays
         weekday_open = time(9, 0)
         weekday_close = time(17, 0)
-        
+
         # Weekend hours might be shorter or closed
         weekend_open = time(10, 0)
         weekend_close = time(16, 0)
-        
+
         # Randomly decide if location is closed on weekends
         closed_on_weekends = random.random() < 0.3
 
@@ -470,7 +453,7 @@ class Command(BaseCommand):
         for day in days:
             is_weekend = day in ['SAT', 'SUN']
             is_closed = is_weekend and closed_on_weekends
-            
+
             if is_closed:
                 # When closed, set both times to None or use a default
                 opening_time = time(0, 0)
@@ -481,7 +464,7 @@ class Command(BaseCommand):
             else:
                 opening_time = weekday_open
                 closing_time = weekday_close
-            
+
             operating_hours.append(LocationOperatingHours(
                 location=page,
                 day=day,
@@ -489,7 +472,7 @@ class Command(BaseCommand):
                 closing_time=closing_time,
                 closed=is_closed
             ))
-        
+
         LocationOperatingHours.objects.bulk_create(operating_hours)
         page.save()
 
@@ -542,135 +525,6 @@ class Command(BaseCommand):
 
                 # Create operating hours (7 entries - one per day)
                 self._create_operating_hours(page)
-
-                # Create initial revision and publish, then create additional revisions
-                self._publish_page_with_revisions(page, revisions)
-
-                created_count += 1
-
-        return created_count
-
-    def create_form_pages(self, home_page, count):
-        """Create form pages using existing FormPage model"""
-        revisions = REVISIONS_PER_PAGE
-        streamfield_blocks = STREAMFIELD_BLOCKS
-        inline_panel_items = INLINE_PANEL_ITEMS
-        streamfield_nesting = STREAMFIELD_NESTING
-
-        # Find the highest existing form page number
-        def extract_form_number(title):
-            return int(title.split()[-1])
-
-        start_number = self._find_max_page_number(FormPage, 'Form Page', extract_form_number) + 1
-        created_count = 0
-
-        # Generate StreamField body once and reuse for all form pages
-        body = self.generate_streamfield(streamfield_blocks, max_nesting=streamfield_nesting)
-
-        for i in range(count):
-            page_number = start_number + i
-            title = f"Form Page {page_number}"
-            slug = slugify(title)
-
-            if FormPage.objects.filter(slug=slug).exists():
-                continue
-
-            with transaction.atomic():
-
-                # Get random image
-                selected_image = self.get_random_image()
-
-                page = FormPage(
-                    title=title,
-                    slug=slug,
-                    body=body,
-                    image=selected_image,
-                    thank_you_text=RichText("Thank you for your submission!"),
-                    from_address="noreply@example.com",
-                    to_address="admin@example.com",
-                    subject="Form Submission",
-                )
-                home_page.add_child(instance=page)
-                # add_child() already saves the page, but we need to refresh to get the ID
-                page.refresh_from_db()
-
-                # Create FormField items (InlinePanel)
-                if inline_panel_items > 0:
-                    field_types = ['singleline', 'multiline', 'email', 'number', 'url', 'checkbox', 'checkboxes',
-                                   'dropdown', 'multiselect', 'radio', 'date', 'datetime']
-                    field_labels = ['Name', 'Email', 'Message', 'Phone', 'Subject', 'Comments', 'Feedback', 'Question',
-                                    'Inquiry', 'Request']
-
-                    form_fields = []
-                    for field_idx in range(inline_panel_items):
-                        field_type = random.choice(field_types)
-                        field_label = random.choice(field_labels) + f" {field_idx + 1}"
-                        form_fields.append(FormField(
-                            page=page,
-                            sort_order=field_idx,
-                            label=field_label,
-                            field_type=field_type,
-                            required=random.choice([True, False]),
-                            help_text=lorem_ipsum.words(random.randint(5, 15),
-                                                        common=False) if random.random() < 0.5 else "",
-                        ))
-                    FormField.objects.bulk_create(form_fields)
-                    # Save page after adding relationships
-                    page.save()
-
-                # Create initial revision and publish
-                revision = page.save_revision()
-                revision.publish()
-                page.refresh_from_db()
-
-                # Create additional revisions (these will be drafts)
-                # Note: FormPage uses thank_you_text instead of introduction
-                for rev_num in range(revisions - 1):
-                    page.thank_you_text = RichText(f"[Revision {rev_num + 2}] " + str(page.thank_you_text))
-                    page.save_revision()
-
-                created_count += 1
-
-        return created_count
-
-    def create_standard_pages(self, home_page, count):
-        """Create standard pages using existing StandardPage model"""
-        revisions = REVISIONS_PER_PAGE
-        streamfield_blocks = STREAMFIELD_BLOCKS
-        streamfield_nesting = STREAMFIELD_NESTING
-
-        # Find the highest existing standard page number
-        def extract_standard_number(title):
-            return int(title.split()[-1]) if title.split()[-1].isdigit() else None
-
-        start_number = self._find_max_page_number(StandardPage, 'Standard Page', extract_standard_number) + 1
-        created_count = 0
-
-        # Generate StreamField body once and reuse for all standard pages
-        body = self.generate_streamfield(streamfield_blocks, max_nesting=streamfield_nesting)
-
-        for i in range(count):
-            page_number = start_number + i
-            title = f"Standard Page {page_number}"
-            slug = slugify(title)
-
-            if StandardPage.objects.filter(slug=slug).exists():
-                continue
-
-            with transaction.atomic():
-
-                # Get random image
-                selected_image = self.get_random_image()
-
-                page = StandardPage(
-                    title=title,
-                    slug=slug,
-                    introduction=lorem_ipsum.paragraph(),
-                    body=body,
-                    image=selected_image,
-                )
-                home_page.add_child(instance=page)
-                page.refresh_from_db()
 
                 # Create initial revision and publish, then create additional revisions
                 self._publish_page_with_revisions(page, revisions)
