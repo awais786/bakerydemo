@@ -2,9 +2,9 @@
 
 <div class="listing-card">
     <a class="listing-card__link" href="{{ page.url }}">
-        {% if page.image %}
+        {% if page.profile_picture %}
             <figure class="listing-card__image">
-                {% picture page.image format-{avif,webp,jpeg} fill-180x180-c100 loading="lazy" %}
+                {% picture page.profile_picture format-{avif,webp,jpeg} fill-180x180-c100 loading="lazy" %}
             </figure>
         {% endif %}
         <div class="listing-card__contents">
@@ -13,20 +13,8 @@
             {% else %}
                 <h3 class="listing-card__title">{{ page.title }}</h3>
             {% endif %}
-            {% if page.origin or page.bread_type or page.role or page.location or page.team %}
+            {% if page.role or page.location or page.team %}
                 <table class="listing-card__meta">
-                    {% if page.origin %}
-                        <tr>
-                            <th scope="row" class="listing-card__meta-category">Origin</th>
-                            <td class="listing-card__meta-content">{{ page.origin }}</td>
-                        </tr>
-                    {% endif %}
-                    {% if page.bread_type %}
-                        <tr>
-                            <th scope="row" class="listing-card__meta-category">Type</th>
-                            <td class="listing-card__meta-content">{{ page.bread_type }}</td>
-                        </tr>
-                    {% endif %}
                     {% if page.role %}
                         <tr>
                             <th scope="row" class="listing-card__meta-category">Role</th>
@@ -42,7 +30,7 @@
                     {% if page.team %}
                         <tr>
                             <th scope="row" class="listing-card__meta-category">Team</th>
-                            <td class="listing-card__meta-content">{{ page.get_team_display }}</td>
+                            <td class="listing-card__meta-content">{{ page.get_team_display|default:page.team }}</td>
                         </tr>
                     {% endif %}
                 </table>
@@ -50,3 +38,4 @@
         </div>
     </a>
 </div>
+
