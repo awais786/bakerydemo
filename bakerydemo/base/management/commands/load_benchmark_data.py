@@ -191,11 +191,13 @@ class Command(BaseCommand):
             block_type = i % 4
 
             # Priority 1: Ensure minimum block quotes for variety and nesting
-            if block_type == 1 and block_quote_count < min_block_quotes:
+            # Create block quote if we haven't met minimum, regardless of slot type
+            if block_quote_count < min_block_quotes:
                 blocks.append(self._create_block_quote(block_quote_count, nest_interval, max_nesting))
                 block_quote_count += 1
             # Priority 2: Ensure minimum headings for variety
-            elif block_type in (0, 2) and heading_count < min_headings:
+            # Create heading if we haven't met minimum, regardless of slot type
+            elif heading_count < min_headings:
                 blocks.append(self._create_heading_block())
                 heading_count += 1
             # Priority 3: Create paragraphs to meet requirement
