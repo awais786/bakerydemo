@@ -46,7 +46,7 @@ class Command(BaseCommand):
         form_count = FORM_PAGES
         standard_count = STANDARD_PAGES
 
-        self.stdout.write(self.style.SUCCESS('Starting benchmark data generation...'))
+        self.stdout.write('Starting benchmark data generation.')
         self.stdout.write(
             f'Target: {blog_count} blog, {bread_count} bread, {location_count} location, '
             f'{form_count} form, {standard_count} standard pages'
@@ -68,33 +68,33 @@ class Command(BaseCommand):
         if blog_count > 0:
             self.stdout.write('\nCreating blog pages...')
             created = self.create_blog_pages(home_page, blog_count)
-            self.stdout.write(self.style.SUCCESS(f'  ✓ Created {created} new blog pages'))
+            self.stdout.write(f'Created {created} new blog pages')
 
         # Create bread pages
         if bread_count > 0:
             self.stdout.write('\nCreating bread pages...')
             created = self.create_bread_pages(home_page, bread_count)
-            self.stdout.write(self.style.SUCCESS(f'  ✓ Created {created} new bread pages'))
+            self.stdout.write(f'Created {created} new bread pages')
 
         # Create location pages
         if location_count > 0:
             self.stdout.write('\nCreating location pages...')
             created = self.create_location_pages(home_page, location_count)
-            self.stdout.write(self.style.SUCCESS(f'  ✓ Created {created} new location pages'))
+            self.stdout.write(f'Created {created} new location pages')
 
         # Create form pages
         if form_count > 0:
             self.stdout.write('\nCreating form pages...')
             created = self.create_form_pages(home_page, form_count)
-            self.stdout.write(self.style.SUCCESS(f'  ✓ Created {created} new form pages'))
+            self.stdout.write(f'Created {created} new form pages')
 
         # Create standard pages
         if standard_count > 0:
             self.stdout.write('\nCreating standard pages...')
             created = self.create_standard_pages(home_page, standard_count)
-            self.stdout.write(self.style.SUCCESS(f'  ✓ Created {created} new standard pages'))
+            self.stdout.write(f'Created {created} new standard pages')
 
-        self.stdout.write(self.style.SUCCESS('\n✓ Benchmark data generation complete!'))
+        self.stdout.write('\nBenchmark data generation complete!')
 
     def get_random_image(self):
         """
@@ -345,9 +345,6 @@ class Command(BaseCommand):
 
                 created_count += 1
 
-            if (created_count) % 50 == 0:
-                self.stdout.write(f'  Progress: {created_count}/{count} pages...')
-
         return created_count
 
     def create_bread_pages(self, home_page, count):
@@ -442,9 +439,6 @@ class Command(BaseCommand):
                 self._publish_page_with_revisions(page, revisions)
 
                 created_count += 1
-
-            if (created_count) % 50 == 0:
-                self.stdout.write(f'  Progress: {created_count}/{count} pages...')
 
         return created_count
 
@@ -548,9 +542,6 @@ class Command(BaseCommand):
 
                 created_count += 1
 
-            if (created_count) % 50 == 0:
-                self.stdout.write(f'  Progress: {created_count}/{count} pages...')
-
         return created_count
 
     def create_form_pages(self, home_page, count):
@@ -631,9 +622,6 @@ class Command(BaseCommand):
                     page.save_revision()
 
                 created_count += 1
-
-            if (created_count) % 50 == 0:
-                self.stdout.write(f'  Progress: {created_count}/{count} pages...')
 
         return created_count
 
