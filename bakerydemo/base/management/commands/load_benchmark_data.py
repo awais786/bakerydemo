@@ -119,10 +119,7 @@ class Command(BaseCommand):
             'attribute_name': lorem_ipsum.words(2, common=False),
             'settings': {
                 'theme': random.choice(['default', 'highlight']),
-                'text_size': random.choice(['default', 'large']),
-                # Simulate deeper nesting by adding nested data
-                '_nesting_level': depth,
-                '_max_depth': max_depth
+                'text_size': random.choice(['default', 'large'])
             }
         }
 
@@ -138,10 +135,16 @@ class Command(BaseCommand):
         paragraph_text = '\n'.join(lorem_ipsum.paragraphs(random.randint(min_paragraphs, max_paragraphs)))
         return ('paragraph_block', RichText(paragraph_text))
 
-    def _create_block_quote(self, position, nest_interval, max_nesting):
-        """Create a block quote, nested if appropriate."""
-        if nest_interval and position % nest_interval == 0:
-            nesting_level = min(position // nest_interval, max_nesting)
+    def _create_block_quote(self, block_quote_index, nest_interval, max_nesting):
+        """Create a block quote, nested if appropriate.
+        
+        Args:
+            block_quote_index: The 0-based index of this block quote (not the overall position)
+            nest_interval: Nest every Nth block quote (None to disable nesting)
+            max_nesting: Maximum nesting depth
+        """
+        if nest_interval and block_quote_index > 0 and block_quote_index % nest_interval == 0:
+            nesting_level = min(block_quote_index // nest_interval, max_nesting)
             return ('block_quote', self.generate_nested_block_quote(nesting_level, max_nesting))
         else:
             return ('block_quote', {
@@ -158,48 +161,77 @@ class Command(BaseCommand):
         Generate StreamField data with specified number of blocks.
         Supports up to 100 blocks with mix of different block types.
         Supports nesting up to 10 levels deep.
+        
+        Ensures minimum variety: at least 10% headings and 10% block quotes
+        (unless num_blocks is very small), while meeting paragraph requirements.
         """
         blocks = []
         paragraph_count = 0
+        block_quote_count = 0
+        heading_count = 0
+
+        # Calculate minimum variety to ensure mix of block types
+        # Reserve at least 10% for headings and 10% for block quotes (minimum 1 each)
+        min_headings = max(1, int(num_blocks * 0.1))
+        min_block_quotes = max(1, int(num_blocks * 0.1))
+        # Calculate how many paragraphs we can create while maintaining variety
+        max_paragraphs_with_variety = num_blocks - min_headings - min_block_quotes
+        # Target paragraphs: use requested amount, but cap at available slots
+        target_paragraphs = min(num_paragraphs, max_paragraphs_with_variety) if num_paragraphs > 0 else max_paragraphs_with_variety
 
         # Calculate nesting interval if nesting is enabled
-        # Ensure nest_interval is never 0 to avoid ZeroDivisionError
+        # Use actual minimum block quotes for accurate nesting calculation
         nest_interval = None
-        if max_nesting > 0 and num_blocks > 0:
+        if max_nesting > 0 and min_block_quotes > 0:
             # Use max(1, ...) to ensure we never divide by 0
-            # When num_blocks < max_nesting, we'll get a smaller interval
-            nest_interval = max(1, num_blocks // max(1, max_nesting))
+            nest_interval = max(1, min_block_quotes // max(1, max_nesting))
 
         for i in range(num_blocks):
-            # Prioritize paragraphs if we need more
-            if num_paragraphs > 0 and paragraph_count < num_paragraphs:
-                blocks.append(self._create_paragraph_block(min_paragraphs=2, max_paragraphs=5))
-                paragraph_count += 1
-                continue
-
             # Cycle through 4 block types: 0=heading, 1=block_quote, 2=heading, 3=paragraph
             block_type = i % 4
 
-            if block_type == 1:  # block_quote
-                blocks.append(self._create_block_quote(i, nest_interval, max_nesting))
-            elif block_type == 3:  # paragraph
+            # Priority 1: Ensure minimum block quotes for variety and nesting
+            if block_type == 1 and block_quote_count < min_block_quotes:
+                blocks.append(self._create_block_quote(block_quote_count, nest_interval, max_nesting))
+                block_quote_count += 1
+            # Priority 2: Ensure minimum headings for variety
+            elif block_type in (0, 2) and heading_count < min_headings:
+                blocks.append(self._create_heading_block())
+                heading_count += 1
+            # Priority 3: Create paragraphs to meet requirement
+            elif num_paragraphs > 0 and paragraph_count < target_paragraphs:
+                blocks.append(self._create_paragraph_block(min_paragraphs=2, max_paragraphs=5))
+                paragraph_count += 1
+            # Priority 4: Follow natural cycle for remaining blocks
+            elif block_type == 3:  # paragraph slot
                 blocks.append(self._create_paragraph_block())
                 paragraph_count += 1
-            else:  # block_type in (0, 2) - heading blocks
+            elif block_type == 1:  # block_quote slot
+                blocks.append(self._create_block_quote(block_quote_count, nest_interval, max_nesting))
+                block_quote_count += 1
+            else:  # block_type in (0, 2) - heading slot
                 blocks.append(self._create_heading_block())
+                heading_count += 1
 
         return blocks
 
     def _publish_page_with_revisions(self, page, revisions):
         """Common helper to publish a page and create additional revisions."""
+        # Store original introduction before any modifications
+        original_introduction = page.introduction
+        
         revision = page.save_revision()
         revision.publish()
         page.refresh_from_db()
 
         # Create additional revisions (these will be drafts)
         for rev_num in range(revisions - 1):
-            page.introduction = f"[Revision {rev_num + 2}] " + page.introduction
+            page.introduction = f"[Revision {rev_num + 2}] " + original_introduction
             page.save_revision()
+        
+        # Restore original introduction so page object reflects published state
+        page.introduction = original_introduction
+        page.refresh_from_db()
 
     def _find_max_page_number(self, model, title_prefix, extract_number_func):
         """Generic helper to find the highest existing page number."""
