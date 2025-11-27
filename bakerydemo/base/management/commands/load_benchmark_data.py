@@ -13,7 +13,6 @@ from wagtail.models import Site
 from wagtail.rich_text import RichText
 from willow.image import Image as WillowImage
 
-# Import existing bakerydemo models
 from bakerydemo.base.models import FormField, FormPage, HomePage, Person, StandardPage
 from bakerydemo.blog.models import BlogIndexPage, BlogPage, BlogPersonRelationship
 from bakerydemo.breads.models import BreadIngredient, BreadPage, BreadsIndexPage, BreadType, Country
