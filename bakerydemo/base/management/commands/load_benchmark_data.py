@@ -14,7 +14,7 @@ from wagtail.rich_text import RichText
 from willow.image import Image as WillowImage
 
 # Import existing bakerydemo models
-from bakerydemo.base.models import FormField, FormPage, Person
+from bakerydemo.base.models import FormField, FormPage, HomePage, Person, StandardPage
 from bakerydemo.blog.models import BlogIndexPage, BlogPage, BlogPersonRelationship
 from bakerydemo.breads.models import BreadIngredient, BreadPage, BreadsIndexPage, BreadType, Country
 from bakerydemo.locations.models import LocationOperatingHours, LocationPage, LocationsIndexPage
@@ -28,69 +28,71 @@ INLINE_PANEL_ITEMS = 100
 RICH_TEXT_PARAGRAPHS = 100
 REVISIONS_PER_PAGE = 5
 
+# Page count constants
+BLOG_PAGES = 50
+BREAD_PAGES = 50
+LOCATION_PAGES = 0
+FORM_PAGES = 0
+STANDARD_PAGES = 0
+
 
 class Command(BaseCommand):
     help = 'Load benchmark data for performance testing using existing content types'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._available_images = None
-
-    def add_arguments(self, parser):
-        parser.add_argument(
-            '--blog-pages',
-            type=int,
-            default=50,
-            help='Number of blog pages to create (default: 50)'
-        )
-        parser.add_argument(
-            '--bread-pages',
-            type=int,
-            default=50,
-            help='Number of bread pages to create (default: 50)'
-        )
-
     def handle(self, *args, **options):
-        blog_count = options['blog_pages']
-        bread_count = options['bread_pages']
-
-        # Content complexity settings - use constants
-        config = {
-            'streamfield_blocks': STREAMFIELD_BLOCKS,
-            'inline_panel_items': INLINE_PANEL_ITEMS,
-            'rich_text_paragraphs': RICH_TEXT_PARAGRAPHS,
-            'streamfield_nesting': STREAMFIELD_NESTING,
-            'revisions': REVISIONS_PER_PAGE,
-        }
+        blog_count = BLOG_PAGES
+        bread_count = BREAD_PAGES
+        location_count = LOCATION_PAGES
+        form_count = FORM_PAGES
+        standard_count = STANDARD_PAGES
 
         self.stdout.write(self.style.SUCCESS('Starting benchmark data generation...'))
         self.stdout.write(
-            f'Target: {blog_count} blog pages, {bread_count} bread pages'
+            f'Target: {blog_count} blog, {bread_count} bread, {location_count} location, '
+            f'{form_count} form, {standard_count} standard pages'
         )
-        self.stdout.write(f'Revisions per page: {config["revisions"]}')
-        self.stdout.write(f'StreamField blocks per page: {config["streamfield_blocks"]}')
-        self.stdout.write(f'StreamField nesting depth: {config["streamfield_nesting"]}')
-        self.stdout.write(f'InlinePanel items per page: {config["inline_panel_items"]}')
-        self.stdout.write(f'Rich text paragraphs: {config["rich_text_paragraphs"]}')
+        self.stdout.write(f'Revisions per page: {REVISIONS_PER_PAGE}')
+        self.stdout.write(f'StreamField blocks per page: {STREAMFIELD_BLOCKS}')
+        self.stdout.write(f'StreamField nesting depth: {STREAMFIELD_NESTING}')
+        self.stdout.write(f'InlinePanel items per page: {INLINE_PANEL_ITEMS}')
+        self.stdout.write(f'Rich text paragraphs: {RICH_TEXT_PARAGRAPHS}')
 
         # Get the home page
         try:
             home_page = Site.objects.get(is_default_site=True).root_page
-        except:
-            self.stdout.write(self.style.ERROR('Could not find home page. Please set up the site first.'))
+        except (Site.DoesNotExist, Site.MultipleObjectsReturned) as e:
+            self.stdout.write(self.style.ERROR(f'Could not find home page: {e}. Please set up the site first.'))
             return
 
         # Create blog pages
         if blog_count > 0:
             self.stdout.write('\nCreating blog pages...')
-            created = self.create_blog_pages(home_page, blog_count, config)
+            created = self.create_blog_pages(home_page, blog_count)
             self.stdout.write(self.style.SUCCESS(f'  ✓ Created {created} new blog pages'))
 
         # Create bread pages
         if bread_count > 0:
             self.stdout.write('\nCreating bread pages...')
-            created = self.create_bread_pages(home_page, bread_count, config)
+            created = self.create_bread_pages(home_page, bread_count)
             self.stdout.write(self.style.SUCCESS(f'  ✓ Created {created} new bread pages'))
+
+        # Create location pages
+        if location_count > 0:
+            self.stdout.write('\nCreating location pages...')
+            created = self.create_location_pages(home_page, location_count)
+            self.stdout.write(self.style.SUCCESS(f'  ✓ Created {created} new location pages'))
+
+        # Create form pages
+        if form_count > 0:
+            self.stdout.write('\nCreating form pages...')
+            created = self.create_form_pages(home_page, form_count)
+            self.stdout.write(self.style.SUCCESS(f'  ✓ Created {created} new form pages'))
+
+        # Create standard pages
+        if standard_count > 0:
+            self.stdout.write('\nCreating standard pages...')
+            created = self.create_standard_pages(home_page, standard_count)
+            self.stdout.write(self.style.SUCCESS(f'  ✓ Created {created} new standard pages'))
 
         self.stdout.write(self.style.SUCCESS('\n✓ Benchmark data generation complete!'))
 
@@ -165,74 +167,101 @@ class Command(BaseCommand):
             }
         }
 
-    def generate_streamfield(self, num_blocks, num_paragraphs=0, images=None, max_nesting=0):
+    def _create_heading_block(self):
+        """Create a heading block."""
+        return ('heading_block', {
+            'heading_text': lorem_ipsum.words(random.randint(3, 8), common=False),
+            'size': random.choice(['h2', 'h3', 'h4', ''])
+        })
+
+    def _create_paragraph_block(self, min_paragraphs=1, max_paragraphs=3):
+        """Create a paragraph block."""
+        paragraph_text = '\n'.join(lorem_ipsum.paragraphs(random.randint(min_paragraphs, max_paragraphs)))
+        return ('paragraph_block', RichText(paragraph_text))
+
+    def _create_block_quote(self, position, nest_interval, max_nesting):
+        """Create a block quote, nested if appropriate."""
+        if nest_interval and position % nest_interval == 0:
+            nesting_level = min(position // nest_interval, max_nesting)
+            return ('block_quote', self.generate_nested_block_quote(nesting_level, max_nesting))
+        else:
+            return ('block_quote', {
+                'text': lorem_ipsum.paragraph(),
+                'attribute_name': lorem_ipsum.words(2, common=False),
+                'settings': {
+                    'theme': random.choice(['default', 'highlight']),
+                    'text_size': random.choice(['default', 'large'])
+                }
+            })
+
+    def generate_streamfield(self, num_blocks, num_paragraphs=0, max_nesting=0):
         """
         Generate StreamField data with specified number of blocks.
         Supports up to 100 blocks with mix of different block types.
         Supports nesting up to 10 levels deep.
         """
         blocks = []
-
-        # Ensure we have exactly num_blocks blocks (for 100 fields requirement)
         paragraph_count = 0
-        nesting_level = 0
+
+        # Calculate nesting interval if nesting is enabled
+        # Ensure nest_interval is never 0 to avoid ZeroDivisionError
+        nest_interval = None
+        if max_nesting > 0 and num_blocks > 0:
+            # Use max(1, ...) to ensure we never divide by 0
+            # When num_blocks < max_nesting, we'll get a smaller interval
+            nest_interval = max(1, num_blocks // max(1, max_nesting))
 
         for i in range(num_blocks):
-            # Determine if we should create a nested block
-            should_nest = max_nesting > 0 and i % (
-                    num_blocks // max(1, max_nesting)) == 0 and nesting_level < max_nesting
-
+            # Prioritize paragraphs if we need more
             if num_paragraphs > 0 and paragraph_count < num_paragraphs:
-                # Add a paragraph block
-                paragraph_text = '\n'.join(lorem_ipsum.paragraphs(random.randint(2, 5)))
-                blocks.append(('paragraph_block', RichText(paragraph_text)))
+                blocks.append(self._create_paragraph_block(min_paragraphs=2, max_paragraphs=5))
                 paragraph_count += 1
-            elif i % 4 == 0:
-                # Heading block
-                blocks.append(('heading_block', {
-                    'heading_text': lorem_ipsum.words(random.randint(3, 8), common=False),
-                    'size': random.choice(['h2', 'h3', 'h4', ''])
-                }))
-            elif i % 4 == 1 and should_nest:
-                # Nested block quote with deeper nesting
-                nesting_level = min(nesting_level + 1, max_nesting)
-                blocks.append(('block_quote', self.generate_nested_block_quote(nesting_level, max_nesting)))
-            elif i % 4 == 1:
-                # Regular block quote
-                blocks.append(('block_quote', {
-                    'text': lorem_ipsum.paragraph(),
-                    'attribute_name': lorem_ipsum.words(2, common=False),
-                    'settings': {
-                        'theme': random.choice(['default', 'highlight']),
-                        'text_size': random.choice(['default', 'large'])
-                    }
-                }))
-            elif i % 4 == 2:
-                # Paragraph block
-                paragraph_text = '\n'.join(lorem_ipsum.paragraphs(random.randint(1, 3)))
-                blocks.append(('paragraph_block', RichText(paragraph_text)))
+                continue
+
+            # Cycle through 4 block types: 0=heading, 1=block_quote, 2=heading, 3=paragraph
+            block_type = i % 4
+
+            if block_type == 1:  # block_quote
+                blocks.append(self._create_block_quote(i, nest_interval, max_nesting))
+            elif block_type == 3:  # paragraph
+                blocks.append(self._create_paragraph_block())
                 paragraph_count += 1
-            else:
-                # Another heading or paragraph to ensure we hit exactly num_blocks
-                if i % 2 == 0:
-                    blocks.append(('heading_block', {
-                        'heading_text': lorem_ipsum.words(random.randint(3, 8), common=False),
-                        'size': random.choice(['h2', 'h3', 'h4', ''])
-                    }))
-                else:
-                    paragraph_text = '\n'.join(lorem_ipsum.paragraphs(random.randint(1, 2)))
-                    blocks.append(('paragraph_block', RichText(paragraph_text)))
-                    paragraph_count += 1
+            else:  # block_type in (0, 2) - heading blocks
+                blocks.append(self._create_heading_block())
 
         return blocks
 
-    def create_blog_pages(self, home_page, count, config):
+    def _publish_page_with_revisions(self, page, revisions):
+        """Common helper to publish a page and create additional revisions."""
+        revision = page.save_revision()
+        revision.publish()
+        page.refresh_from_db()
+
+        # Create additional revisions (these will be drafts)
+        for rev_num in range(revisions - 1):
+            page.introduction = f"[Revision {rev_num + 2}] " + page.introduction
+            page.save_revision()
+
+    def _find_max_page_number(self, model, title_prefix, extract_number_func):
+        """Generic helper to find the highest existing page number."""
+        existing_pages = model.objects.filter(title__startswith=title_prefix)
+        max_existing = 0
+        for page in existing_pages:
+            try:
+                num = extract_number_func(page.title)
+                if num is not None:
+                    max_existing = max(max_existing, num)
+            except (ValueError, IndexError, AttributeError):
+                pass
+        return max_existing
+
+    def create_blog_pages(self, home_page, count):
         """Create blog pages using existing BlogPage model"""
-        revisions = config.get('revisions', REVISIONS_PER_PAGE)
-        streamfield_blocks = config.get('streamfield_blocks', STREAMFIELD_BLOCKS)
-        inline_panel_items = config.get('inline_panel_items', INLINE_PANEL_ITEMS)
-        rich_text_paragraphs = config.get('rich_text_paragraphs', RICH_TEXT_PARAGRAPHS)
-        streamfield_nesting = config.get('streamfield_nesting', STREAMFIELD_NESTING)
+        revisions = REVISIONS_PER_PAGE
+        streamfield_blocks = STREAMFIELD_BLOCKS
+        inline_panel_items = INLINE_PANEL_ITEMS
+        rich_text_paragraphs = RICH_TEXT_PARAGRAPHS
+        streamfield_nesting = STREAMFIELD_NESTING
         blog_index = BlogIndexPage.objects.filter(slug='blog').first()
 
         if not blog_index:
@@ -251,16 +280,10 @@ class Command(BaseCommand):
                 ))
 
         # Find the highest existing blog post number
-        existing_pages = BlogPage.objects.filter(title__startswith='Blog Post')
-        max_existing = 0
-        for page in existing_pages:
-            try:
-                num = int(page.title.split()[-1])
-                max_existing = max(max_existing, num)
-            except (ValueError, IndexError):
-                pass
+        def extract_blog_number(title):
+            return int(title.split()[-1])
 
-        start_number = max_existing + 1
+        start_number = self._find_max_page_number(BlogPage, 'Blog Post', extract_blog_number) + 1
         created_count = 0
 
         # Get or create some tags
@@ -317,16 +340,8 @@ class Command(BaseCommand):
                     page.tags.add(*selected_tags)
                     page.save()
 
-                # Create initial revision and publish
-                revision = page.save_revision()
-                revision.publish()
-                # Ensure page is live
-                page.refresh_from_db()
-
-                # Create additional revisions (these will be drafts)
-                for rev_num in range(revisions - 1):
-                    page.introduction = f"[Revision {rev_num + 2}] " + page.introduction
-                    page.save_revision()
+                # Create initial revision and publish, then create additional revisions
+                self._publish_page_with_revisions(page, revisions)
 
                 created_count += 1
 
@@ -335,11 +350,11 @@ class Command(BaseCommand):
 
         return created_count
 
-    def create_bread_pages(self, home_page, count, config):
+    def create_bread_pages(self, home_page, count):
         """Create bread pages using existing BreadPage model"""
-        revisions = config.get('revisions', REVISIONS_PER_PAGE)
-        streamfield_blocks = config.get('streamfield_blocks', STREAMFIELD_BLOCKS)
-        streamfield_nesting = config.get('streamfield_nesting', STREAMFIELD_NESTING)
+        revisions = REVISIONS_PER_PAGE
+        streamfield_blocks = STREAMFIELD_BLOCKS
+        streamfield_nesting = STREAMFIELD_NESTING
         breads_index = BreadsIndexPage.objects.filter(slug='breads').first()
 
         if not breads_index:
@@ -374,26 +389,19 @@ class Command(BaseCommand):
             ingredients.append(ingredient)
 
         # Find the highest existing bread page number
-        # Check for any bread pages with numbers in title
-        existing_pages = BreadPage.objects.all()
-        max_existing = 0
-        for page in existing_pages:
-            try:
-                # Extract number from title like "Sourdough #123" or "Benchmark Sourdough #123"
-                if '#' in page.title:
-                    parts = page.title.split('#')
-                    if len(parts) > 1:
-                        num = int(parts[-1].strip())
-                        max_existing = max(max_existing, num)
-            except (ValueError, IndexError):
-                pass
+        def extract_bread_number(title):
+            if '#' in title:
+                parts = title.split('#')
+                if len(parts) > 1:
+                    return int(parts[-1].strip())
+            return None
 
-        start_number = max_existing + 1
+        start_number = self._find_max_page_number(BreadPage, '', extract_bread_number) + 1
         created_count = 0
 
         for i in range(count):
-            bread_type_name = random.choice(bread_type_names)
             page_number = start_number + i
+            bread_type_name = random.choice(bread_type_names)
             title = f"{bread_type_name} #{page_number}"
             slug = slugify(title)
 
@@ -430,16 +438,8 @@ class Command(BaseCommand):
                     # Save page after setting ingredients
                     page.save()
 
-                # Create initial revision and publish
-                revision = page.save_revision()
-                revision.publish()
-                # Ensure page is live
-                page.refresh_from_db()
-
-                # Create additional revisions (these will be drafts)
-                for rev_num in range(revisions - 1):
-                    page.introduction = f"[Revision {rev_num + 2}] " + page.introduction
-                    page.save_revision()
+                # Create initial revision and publish, then create additional revisions
+                self._publish_page_with_revisions(page, revisions)
 
                 created_count += 1
 
@@ -448,12 +448,58 @@ class Command(BaseCommand):
 
         return created_count
 
-    def create_location_pages(self, home_page, count, config):
+    def _find_max_location_page_number(self):
+        """Find the highest existing location page number."""
+
+        def extract_location_number(title):
+            if '#' in title:
+                parts = title.split('#')
+                if len(parts) > 1:
+                    return int(parts[-1].strip())
+            return None
+
+        return self._find_max_page_number(LocationPage, '', extract_location_number)
+
+    def _generate_location_address(self, city):
+        """Generate a multi-line address for a location."""
+        street_number = random.randint(1, 999)
+        street_name = random.choice(['Main Street', 'Oak Avenue', 'Park Road', 'High Street', 'Church Lane'])
+        country = random.choice(['Iceland', 'United States', 'United Kingdom', 'France', 'Germany'])
+        return f"{street_number} {street_name},\r\n{city},\r\n{country}"
+
+    def _generate_lat_long(self):
+        """Generate a latitude/longitude string with space after comma."""
+        lat = random.uniform(-90, 90)
+        lng = random.uniform(-180, 180)
+        return f"{lat:.6f}, {lng:.6f}"
+
+    def _create_operating_hours(self, page, inline_panel_items):
+        """Create LocationOperatingHours items for a location page."""
+        days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+        time_slots = [
+            (time(6, 0), time(12, 0)),  # Morning
+            (time(12, 0), time(18, 0)),  # Afternoon
+            (time(18, 0), time(22, 0)),  # Evening
+        ]
+
+        for hour_idx in range(inline_panel_items):
+            day = days[hour_idx % len(days)]
+            time_slot = time_slots[hour_idx % len(time_slots)]
+            LocationOperatingHours.objects.create(
+                location=page,
+                day=day,
+                opening_time=time_slot[0],
+                closing_time=time_slot[1],
+                closed=(day in ['SAT', 'SUN'] and random.random() < 0.3)
+            )
+        page.save()
+
+    def create_location_pages(self, home_page, count):
         """Create location pages using existing LocationPage model"""
-        revisions = config.get('revisions', REVISIONS_PER_PAGE)
-        streamfield_blocks = config.get('streamfield_blocks', STREAMFIELD_BLOCKS)
-        inline_panel_items = config.get('inline_panel_items', INLINE_PANEL_ITEMS)
-        streamfield_nesting = config.get('streamfield_nesting', STREAMFIELD_NESTING)
+        revisions = REVISIONS_PER_PAGE
+        streamfield_blocks = STREAMFIELD_BLOCKS
+        inline_panel_items = INLINE_PANEL_ITEMS
+        streamfield_nesting = STREAMFIELD_NESTING
         locations_index = LocationsIndexPage.objects.filter(slug='locations').first()
 
         if not locations_index:
@@ -464,23 +510,7 @@ class Command(BaseCommand):
                   'Toronto', 'Mumbai', 'Singapore', 'Dubai', 'Barcelona', 'Amsterdam',
                   'Rome', 'Madrid', 'Seoul', 'San Francisco', 'Chicago', 'Boston']
 
-        days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
-
-        # Find the highest existing location page number
-        existing_pages = LocationPage.objects.all()
-        max_existing = 0
-        for page in existing_pages:
-            try:
-                # Extract number from title like "New York Location #123"
-                if '#' in page.title:
-                    parts = page.title.split('#')
-                    if len(parts) > 1:
-                        num = int(parts[-1].strip())
-                        max_existing = max(max_existing, num)
-            except (ValueError, IndexError):
-                pass
-
-        start_number = max_existing + 1
+        start_number = self._find_max_location_page_number() + 1
         created_count = 0
 
         for i in range(count):
@@ -493,21 +523,10 @@ class Command(BaseCommand):
                 continue
 
             with transaction.atomic():
-                # Generate StreamField body
                 body = self.generate_streamfield(streamfield_blocks, max_nesting=streamfield_nesting)
-
-                # Get random image
                 selected_image = self.get_random_image()
-
-                # Create multi-line address format like in fixtures
-                street_number = random.randint(1, 999)
-                street_name = random.choice(['Main Street', 'Oak Avenue', 'Park Road', 'High Street', 'Church Lane'])
-                address = f"{street_number} {street_name},\r\n{city},\r\n{random.choice(['Iceland', 'United States', 'United Kingdom', 'France', 'Germany'])}"
-
-                # Format lat_long with space after comma
-                lat = random.uniform(-90, 90)
-                lng = random.uniform(-180, 180)
-                lat_long = f"{lat:.6f}, {lng:.6f}"
+                address = self._generate_location_address(city)
+                lat_long = self._generate_lat_long()
 
                 page = LocationPage(
                     title=title,
@@ -519,34 +538,13 @@ class Command(BaseCommand):
                     image=selected_image,
                 )
                 locations_index.add_child(instance=page)
-                # add_child() already saves the page, but we need to refresh to get the ID
                 page.refresh_from_db()
 
-                # Create LocationOperatingHours items (InlinePanel)
                 if inline_panel_items > 0:
-                    # Create operating hours for all days or specified number
-                    hours_to_create = min(inline_panel_items, len(days))
-                    for day_idx, day in enumerate(days[:hours_to_create]):
-                        LocationOperatingHours.objects.create(
-                            location=page,
-                            day=day,
-                            opening_time=time(9, 0),
-                            closing_time=time(17, 0),
-                            closed=(day in ['SAT', 'SUN'] and random.random() < 0.3)
-                        )
-                    # Save page after adding relationships
-                    page.save()
+                    self._create_operating_hours(page, inline_panel_items)
 
-                # Create initial revision and publish
-                revision = page.save_revision()
-                revision.publish()
-                # Ensure page is live
-                page.refresh_from_db()
-
-                # Create additional revisions (these will be drafts)
-                for rev_num in range(revisions - 1):
-                    page.introduction = f"[Revision {rev_num + 2}] " + page.introduction
-                    page.save_revision()
+                # Create initial revision and publish, then create additional revisions
+                self._publish_page_with_revisions(page, revisions)
 
                 created_count += 1
 
@@ -555,24 +553,18 @@ class Command(BaseCommand):
 
         return created_count
 
-    def create_form_pages(self, home_page, count, config):
+    def create_form_pages(self, home_page, count):
         """Create form pages using existing FormPage model"""
-        revisions = config.get('revisions', REVISIONS_PER_PAGE)
-        streamfield_blocks = config.get('streamfield_blocks', STREAMFIELD_BLOCKS)
-        inline_panel_items = config.get('inline_panel_items', INLINE_PANEL_ITEMS)
-        streamfield_nesting = config.get('streamfield_nesting', STREAMFIELD_NESTING)
+        revisions = REVISIONS_PER_PAGE
+        streamfield_blocks = STREAMFIELD_BLOCKS
+        inline_panel_items = INLINE_PANEL_ITEMS
+        streamfield_nesting = STREAMFIELD_NESTING
 
         # Find the highest existing form page number
-        existing_pages = FormPage.objects.filter(title__startswith='Form Page')
-        max_existing = 0
-        for page in existing_pages:
-            try:
-                num = int(page.title.split()[-1])
-                max_existing = max(max_existing, num)
-            except (ValueError, IndexError):
-                pass
+        def extract_form_number(title):
+            return int(title.split()[-1])
 
-        start_number = max_existing + 1
+        start_number = self._find_max_page_number(FormPage, 'Form Page', extract_form_number) + 1
         created_count = 0
 
         for i in range(count):
@@ -630,10 +622,10 @@ class Command(BaseCommand):
                 # Create initial revision and publish
                 revision = page.save_revision()
                 revision.publish()
-                # Ensure page is live
                 page.refresh_from_db()
 
                 # Create additional revisions (these will be drafts)
+                # Note: FormPage uses thank_you_text instead of introduction
                 for rev_num in range(revisions - 1):
                     page.thank_you_text = RichText(f"[Revision {rev_num + 2}] " + str(page.thank_you_text))
                     page.save_revision()
@@ -642,5 +634,50 @@ class Command(BaseCommand):
 
             if (created_count) % 50 == 0:
                 self.stdout.write(f'  Progress: {created_count}/{count} pages...')
+
+        return created_count
+
+    def create_standard_pages(self, home_page, count):
+        """Create standard pages using existing StandardPage model"""
+        revisions = REVISIONS_PER_PAGE
+        streamfield_blocks = STREAMFIELD_BLOCKS
+        streamfield_nesting = STREAMFIELD_NESTING
+
+        # Find the highest existing standard page number
+        def extract_standard_number(title):
+            return int(title.split()[-1]) if title.split()[-1].isdigit() else None
+
+        start_number = self._find_max_page_number(StandardPage, 'Standard Page', extract_standard_number) + 1
+        created_count = 0
+
+        for i in range(count):
+            page_number = start_number + i
+            title = f"Standard Page {page_number}"
+            slug = slugify(title)
+
+            if StandardPage.objects.filter(slug=slug).exists():
+                continue
+
+            with transaction.atomic():
+                # Generate StreamField body
+                body = self.generate_streamfield(streamfield_blocks, max_nesting=streamfield_nesting)
+
+                # Get random image
+                selected_image = self.get_random_image()
+
+                page = StandardPage(
+                    title=title,
+                    slug=slug,
+                    introduction=lorem_ipsum.paragraph(),
+                    body=body,
+                    image=selected_image,
+                )
+                home_page.add_child(instance=page)
+                page.refresh_from_db()
+
+                # Create initial revision and publish, then create additional revisions
+                self._publish_page_with_revisions(page, revisions)
+
+                created_count += 1
 
         return created_count
