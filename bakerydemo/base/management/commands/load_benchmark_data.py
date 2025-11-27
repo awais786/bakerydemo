@@ -28,9 +28,9 @@ RICH_TEXT_PARAGRAPHS = 100
 REVISIONS_PER_PAGE = 5
 
 # Page count constants
-BLOG_PAGES = 50
-BREAD_PAGES = 50
-LOCATION_PAGES = 0
+BLOG_PAGES = 200
+BREAD_PAGES = 200
+LOCATION_PAGES = 250
 FORM_PAGES = 0
 STANDARD_PAGES = 0
 
@@ -65,72 +65,51 @@ class Command(BaseCommand):
 
         # Create blog pages
         if blog_count > 0:
-            self.stdout.write('\nCreating blog pages...')
+            self.stdout.write('Creating blog pages...')
             created = self.create_blog_pages(home_page, blog_count)
             self.stdout.write(f'Created {created} new blog pages')
 
         # Create bread pages
         if bread_count > 0:
-            self.stdout.write('\nCreating bread pages...')
+            self.stdout.write('Creating bread pages...')
             created = self.create_bread_pages(home_page, bread_count)
             self.stdout.write(f'Created {created} new bread pages')
 
         # Create location pages
         if location_count > 0:
-            self.stdout.write('\nCreating location pages...')
+            self.stdout.write('Creating location pages...')
             created = self.create_location_pages(home_page, location_count)
             self.stdout.write(f'Created {created} new location pages')
 
         # Create form pages
         if form_count > 0:
-            self.stdout.write('\nCreating form pages...')
+            self.stdout.write('Creating form pages...')
             created = self.create_form_pages(home_page, form_count)
             self.stdout.write(f'Created {created} new form pages')
 
         # Create standard pages
         if standard_count > 0:
-            self.stdout.write('\nCreating standard pages...')
+            self.stdout.write('Creating standard pages...')
             created = self.create_standard_pages(home_page, standard_count)
             self.stdout.write(f'Created {created} new standard pages')
 
-        self.stdout.write('\nBenchmark data generation complete!')
+        self.stdout.write('Benchmark data generation complete!')
+
+    def _get_images_cache(self):
+        """Cache all available images to avoid repeated queries."""
+        if not hasattr(self, '_images_cache'):
+            self._images_cache = list(Image.objects.all())
+        return self._images_cache
 
     def get_random_image(self):
         """
-        Get a random image from existing images, or create one from fixtures if needed.
+        Get a random image from cached images.
         Returns None if no images are available.
         """
-        # First, try to get an existing image from the database
-        existing_images = Image.objects.all()
-        if existing_images.exists():
-            return existing_images.order_by('?').first()
-
-        # If no images exist, try to create one from fixtures
-        if not FIXTURE_MEDIA_DIR.exists():
-            return None
-
-        try:
-            image_files = list(FIXTURE_MEDIA_DIR.iterdir())
-            if not image_files:
-                return None
-
-            # Create a new image from a random fixture file
-            random_image_file = random.choice(image_files)
-            with random_image_file.open(mode="rb") as image_file:
-                willow_image = WillowImage.open(image_file)
-                width, height = willow_image.get_size()
-                image = Image.objects.create(
-                    title=lorem_ipsum.words(3, common=False),
-                    width=width,
-                    height=height,
-                    file_size=random_image_file.stat().st_size,
-                )
-                image_file.seek(0)
-                image.file.save(random_image_file.name, image_file)
-                return image
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f'  Could not create image from fixtures: {e}'))
-            return None
+        images = self._get_images_cache()
+        if images:
+            return random.choice(images)
+        return None
 
     def generate_nested_block_quote(self, depth, max_depth):
         """
@@ -148,8 +127,6 @@ class Command(BaseCommand):
                 }
             }
 
-        # Create nested structure - simulate deeper nesting by creating
-        # multiple nested settings structures
         nested_text = lorem_ipsum.paragraph()
         for _ in range(depth):
             nested_text = f"[Level {depth}] {nested_text}"
@@ -271,12 +248,15 @@ class Command(BaseCommand):
         people = list(Person.objects.all())
         if not people and inline_panel_items > 0:
             self.stdout.write(self.style.WARNING('  No Person objects found. Creating sample people...'))
+            people_to_create = []
             for i in range(max(10, inline_panel_items)):
-                people.append(Person.objects.create(
+                people_to_create.append(Person(
                     first_name=lorem_ipsum.words(1, common=False),
                     last_name=lorem_ipsum.words(1, common=False),
                     job_title=lorem_ipsum.words(2, common=False),
                 ))
+            Person.objects.bulk_create(people_to_create)
+            people = list(Person.objects.all())
 
         # Find the highest existing blog post number
         def extract_blog_number(title):
@@ -292,6 +272,10 @@ class Command(BaseCommand):
             tag, _ = Tag.objects.get_or_create(name=tag_name)
             tags.append(tag)
 
+        # Generate StreamField body once and reuse for all blog pages
+        body = self.generate_streamfield(streamfield_blocks, rich_text_paragraphs,
+                                         max_nesting=streamfield_nesting)
+
         for i in range(count):
             page_number = start_number + i
             title = f"Blog Post {page_number}"
@@ -302,9 +286,6 @@ class Command(BaseCommand):
                 continue
 
             with transaction.atomic():
-                # Generate StreamField body
-                body = self.generate_streamfield(streamfield_blocks, rich_text_paragraphs,
-                                                 max_nesting=streamfield_nesting)
 
                 # Get random image
                 selected_image = self.get_random_image()
@@ -325,11 +306,11 @@ class Command(BaseCommand):
                 # Create BlogPersonRelationship items (InlinePanel equivalent)
                 if inline_panel_items > 0 and people:
                     selected_people = random.sample(people, min(inline_panel_items, len(people)))
-                    for person in selected_people:
-                        BlogPersonRelationship.objects.create(
-                            page=page,
-                            person=person
-                        )
+                    relationships = [
+                        BlogPersonRelationship(page=page, person=person)
+                        for person in selected_people
+                    ]
+                    BlogPersonRelationship.objects.bulk_create(relationships)
                     # Save page after adding relationships
                     page.save()
 
@@ -395,6 +376,9 @@ class Command(BaseCommand):
         start_number = self._find_max_page_number(BreadPage, '', extract_bread_number) + 1
         created_count = 0
 
+        # Generate StreamField body once and reuse for all bread pages
+        body = self.generate_streamfield(streamfield_blocks, max_nesting=streamfield_nesting)
+
         for i in range(count):
             page_number = start_number + i
             bread_type_name = random.choice(bread_type_names)
@@ -405,8 +389,6 @@ class Command(BaseCommand):
                 continue
 
             with transaction.atomic():
-                # Generate StreamField body
-                body = self.generate_streamfield(streamfield_blocks, max_nesting=streamfield_nesting)
 
                 # Select random bread_type, origin, ingredients, and image
                 selected_bread_type = random.choice(bread_types)
@@ -466,32 +448,55 @@ class Command(BaseCommand):
         lng = random.uniform(-180, 180)
         return f"{lat:.6f}, {lng:.6f}"
 
-    def _create_operating_hours(self, page, inline_panel_items):
-        """Create LocationOperatingHours items for a location page."""
+    def _create_operating_hours(self, page):
+        """Create LocationOperatingHours items for a location page.
+        Creates one entry per day of the week (7 entries total).
+        Uses consistent business hours for weekdays, with optional weekend closure.
+        """
         days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
-        time_slots = [
-            (time(6, 0), time(12, 0)),  # Morning
-            (time(12, 0), time(18, 0)),  # Afternoon
-            (time(18, 0), time(22, 0)),  # Evening
-        ]
+        
+        # Standard business hours (9am-5pm) for weekdays
+        weekday_open = time(9, 0)
+        weekday_close = time(17, 0)
+        
+        # Weekend hours might be shorter or closed
+        weekend_open = time(10, 0)
+        weekend_close = time(16, 0)
+        
+        # Randomly decide if location is closed on weekends
+        closed_on_weekends = random.random() < 0.3
 
-        for hour_idx in range(inline_panel_items):
-            day = days[hour_idx % len(days)]
-            time_slot = time_slots[hour_idx % len(time_slots)]
-            LocationOperatingHours.objects.create(
+        operating_hours = []
+        for day in days:
+            is_weekend = day in ['SAT', 'SUN']
+            is_closed = is_weekend and closed_on_weekends
+            
+            if is_closed:
+                # When closed, set both times to None or use a default
+                opening_time = time(0, 0)
+                closing_time = time(0, 0)
+            elif is_weekend:
+                opening_time = weekend_open
+                closing_time = weekend_close
+            else:
+                opening_time = weekday_open
+                closing_time = weekday_close
+            
+            operating_hours.append(LocationOperatingHours(
                 location=page,
                 day=day,
-                opening_time=time_slot[0],
-                closing_time=time_slot[1],
-                closed=(day in ['SAT', 'SUN'] and random.random() < 0.3)
-            )
+                opening_time=opening_time,
+                closing_time=closing_time,
+                closed=is_closed
+            ))
+        
+        LocationOperatingHours.objects.bulk_create(operating_hours)
         page.save()
 
     def create_location_pages(self, home_page, count):
         """Create location pages using existing LocationPage model"""
         revisions = REVISIONS_PER_PAGE
         streamfield_blocks = STREAMFIELD_BLOCKS
-        inline_panel_items = INLINE_PANEL_ITEMS
         streamfield_nesting = STREAMFIELD_NESTING
         locations_index = LocationsIndexPage.objects.filter(slug='locations').first()
 
@@ -506,6 +511,9 @@ class Command(BaseCommand):
         start_number = self._find_max_location_page_number() + 1
         created_count = 0
 
+        # Generate StreamField body once and reuse for all location pages
+        body = self.generate_streamfield(streamfield_blocks, max_nesting=streamfield_nesting)
+
         for i in range(count):
             city = random.choice(cities)
             page_number = start_number + i
@@ -516,7 +524,6 @@ class Command(BaseCommand):
                 continue
 
             with transaction.atomic():
-                body = self.generate_streamfield(streamfield_blocks, max_nesting=streamfield_nesting)
                 selected_image = self.get_random_image()
                 address = self._generate_location_address(city)
                 lat_long = self._generate_lat_long()
@@ -533,8 +540,8 @@ class Command(BaseCommand):
                 locations_index.add_child(instance=page)
                 page.refresh_from_db()
 
-                if inline_panel_items > 0:
-                    self._create_operating_hours(page, inline_panel_items)
+                # Create operating hours (7 entries - one per day)
+                self._create_operating_hours(page)
 
                 # Create initial revision and publish, then create additional revisions
                 self._publish_page_with_revisions(page, revisions)
@@ -557,6 +564,9 @@ class Command(BaseCommand):
         start_number = self._find_max_page_number(FormPage, 'Form Page', extract_form_number) + 1
         created_count = 0
 
+        # Generate StreamField body once and reuse for all form pages
+        body = self.generate_streamfield(streamfield_blocks, max_nesting=streamfield_nesting)
+
         for i in range(count):
             page_number = start_number + i
             title = f"Form Page {page_number}"
@@ -566,8 +576,6 @@ class Command(BaseCommand):
                 continue
 
             with transaction.atomic():
-                # Generate StreamField body
-                body = self.generate_streamfield(streamfield_blocks, max_nesting=streamfield_nesting)
 
                 # Get random image
                 selected_image = self.get_random_image()
@@ -593,11 +601,11 @@ class Command(BaseCommand):
                     field_labels = ['Name', 'Email', 'Message', 'Phone', 'Subject', 'Comments', 'Feedback', 'Question',
                                     'Inquiry', 'Request']
 
+                    form_fields = []
                     for field_idx in range(inline_panel_items):
                         field_type = random.choice(field_types)
                         field_label = random.choice(field_labels) + f" {field_idx + 1}"
-
-                        FormField.objects.create(
+                        form_fields.append(FormField(
                             page=page,
                             sort_order=field_idx,
                             label=field_label,
@@ -605,7 +613,8 @@ class Command(BaseCommand):
                             required=random.choice([True, False]),
                             help_text=lorem_ipsum.words(random.randint(5, 15),
                                                         common=False) if random.random() < 0.5 else "",
-                        )
+                        ))
+                    FormField.objects.bulk_create(form_fields)
                     # Save page after adding relationships
                     page.save()
 
@@ -637,6 +646,9 @@ class Command(BaseCommand):
         start_number = self._find_max_page_number(StandardPage, 'Standard Page', extract_standard_number) + 1
         created_count = 0
 
+        # Generate StreamField body once and reuse for all standard pages
+        body = self.generate_streamfield(streamfield_blocks, max_nesting=streamfield_nesting)
+
         for i in range(count):
             page_number = start_number + i
             title = f"Standard Page {page_number}"
@@ -646,8 +658,6 @@ class Command(BaseCommand):
                 continue
 
             with transaction.atomic():
-                # Generate StreamField body
-                body = self.generate_streamfield(streamfield_blocks, max_nesting=streamfield_nesting)
 
                 # Get random image
                 selected_image = self.get_random_image()
