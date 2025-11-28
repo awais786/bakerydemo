@@ -22,7 +22,6 @@ FIXTURE_MEDIA_DIR = Path(settings.PROJECT_DIR) / "base/fixtures/media/original_i
 
 # Benchmark configuration constants
 STREAMFIELD_BLOCKS = 100
-STREAMFIELD_NESTING = 10
 INLINE_PANEL_ITEMS = 100
 RICH_TEXT_PARAGRAPHS = 100
 REVISIONS_PER_PAGE = 5
@@ -38,7 +37,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.stdout.write('Starting benchmark data generation.')
-    
+
         try:
             home_page = Site.objects.get(is_default_site=True).root_page
         except (Site.DoesNotExist, Site.MultipleObjectsReturned) as e:
@@ -71,29 +70,6 @@ class Command(BaseCommand):
         """Generate a random lorem ipsum paragraph."""
         return lorem_ipsum.paragraph()
 
-    def generate_nested_block_quote(self, depth, max_depth):
-        """Generate nested block quote with level prefixes."""
-        settings = {
-            'theme': random.choice(['default', 'highlight']),
-            'text_size': random.choice(['default', 'large'])
-        }
-        
-        if depth >= max_depth:
-            return {
-                'text': self._generate_paragraph(),
-                'attribute_name': lorem_ipsum.words(2, common=False),
-                'settings': settings
-            }
-
-        level_prefixes = [f"[Level {level}]" for level in range(1, depth + 1)]
-        nested_text = " ".join(level_prefixes) + " " + self._generate_paragraph()
-
-        return {
-            'text': nested_text,
-            'attribute_name': lorem_ipsum.words(2, common=False),
-            'settings': settings
-        }
-
     def _create_heading_block(self):
         """Create a heading block with random text."""
         return ('heading_block', {
@@ -106,12 +82,15 @@ class Command(BaseCommand):
         paragraph_text = '\n'.join(lorem_ipsum.paragraphs(random.randint(min_paragraphs, max_paragraphs)))
         return ('paragraph_block', RichText(paragraph_text))
 
-    def _create_block_quote(self, block_quote_index, nest_interval, max_nesting):
-        """Create a block quote, optionally nested based on index."""
-        if nest_interval and block_quote_index > 0 and block_quote_index % nest_interval == 0:
-            nesting_level = min(block_quote_index // nest_interval, max_nesting)
-            return ('block_quote', self.generate_nested_block_quote(nesting_level, max_nesting))
-        
+    def _create_image_block(self):
+        """Create an image block with a random image."""
+        image = self.get_random_image()
+        if image:
+            return ('image', image)
+        return None
+
+    def _create_block_quote(self):
+        """Create a block quote."""
         return ('block_quote', {
             'text': self._generate_paragraph(),
             'attribute_name': lorem_ipsum.words(2, common=False),
@@ -121,35 +100,31 @@ class Command(BaseCommand):
             }
         })
 
-    def generate_streamfield(self, num_blocks, num_paragraphs=0, max_nesting=0):
-        """Generate StreamField blocks cycling through heading, block_quote, paragraph."""
+    def generate_streamfield(self, num_blocks, num_paragraphs=0):
+        """Generate StreamField blocks cycling through heading, block_quote, paragraph, image."""
         blocks = []
-        block_quote_count = 0
-        
-        nest_interval = None
-        if max_nesting > 0:
-            nest_interval = max(1, num_blocks // max(1, max_nesting * 10))
 
         for i in range(num_blocks):
-            block_type = i % 4
-            
-            if block_type == 0 or block_type == 2:
+            block_type = i % 5
+
+            if block_type in (0, 2):
                 blocks.append(self._create_heading_block())
             elif block_type == 1:
-                blocks.append(self._create_block_quote(block_quote_count, nest_interval, max_nesting))
-                block_quote_count += 1
+                blocks.append(self._create_block_quote())
+            elif block_type == 3:
+                image_block = self._create_image_block()
+                blocks.append(image_block if image_block else self._create_paragraph_block())
             else:
-                if num_paragraphs > 0:
-                    blocks.append(self._create_paragraph_block(min_paragraphs=2, max_paragraphs=5))
-                else:
-                    blocks.append(self._create_paragraph_block())
+                min_p = 2 if num_paragraphs > 0 else 1
+                max_p = 5 if num_paragraphs > 0 else 3
+                blocks.append(self._create_paragraph_block(min_p, max_p))
 
         return blocks
 
     def _publish_page_with_revisions(self, page, revisions):
         """Publish page and create additional draft revisions."""
         original_introduction = page.introduction
-        
+
         revision = page.save_revision()
         revision.publish()
         page.refresh_from_db()
@@ -157,22 +132,10 @@ class Command(BaseCommand):
         for rev_num in range(revisions - 1):
             page.introduction = f"[Revision {rev_num + 2}] " + original_introduction
             page.save_revision()
-        
+
         page.introduction = original_introduction
         page.refresh_from_db()
 
-    def _find_max_page_number(self, model, title_prefix, extract_number_func):
-        """Find the highest page number for a given model and title prefix."""
-        existing_pages = model.objects.filter(title__startswith=title_prefix)
-        max_existing = 0
-        for page in existing_pages:
-            try:
-                num = extract_number_func(page.title)
-                if num is not None:
-                    max_existing = max(max_existing, num)
-            except (ValueError, IndexError, AttributeError):
-                pass
-        return max_existing
 
     def create_blog_pages(self, home_page, count):
         """Create blog pages with relationships, tags, and streamfield content."""
@@ -195,12 +158,12 @@ class Command(BaseCommand):
             Person.objects.bulk_create(people_to_create)
             people = list(Person.objects.all())
 
-        start_number = self._find_max_page_number(BlogPage, 'Blog Post', lambda title: int(title.split()[-1])) + 1
+        start_number = BlogPage.objects.count() + 1
 
         tag_names = ['baking', 'bread', 'recipe', 'cooking', 'food', 'bakery', 'yeast', 'dough', 'pastry', 'dessert']
         tags = [Tag.objects.get_or_create(name=name)[0] for name in tag_names]
 
-        body = self.generate_streamfield(STREAMFIELD_BLOCKS, RICH_TEXT_PARAGRAPHS, max_nesting=STREAMFIELD_NESTING)
+        body = self.generate_streamfield(STREAMFIELD_BLOCKS, RICH_TEXT_PARAGRAPHS)
 
         created_count = 0
         for i in range(count):
@@ -258,15 +221,8 @@ class Command(BaseCommand):
         countries = [Country.objects.get_or_create(title=name)[0] for name in country_names]
         ingredients = [BreadIngredient.objects.get_or_create(name=name)[0] for name in ingredient_names]
 
-        def extract_bread_number(title):
-            if '#' in title:
-                parts = title.split('#')
-                if len(parts) > 1:
-                    return int(parts[-1].strip())
-            return None
-
-        start_number = self._find_max_page_number(BreadPage, '', extract_bread_number) + 1
-        body = self.generate_streamfield(STREAMFIELD_BLOCKS, max_nesting=STREAMFIELD_NESTING)
+        start_number = BreadPage.objects.count() + 1
+        body = self.generate_streamfield(STREAMFIELD_BLOCKS)
 
         created_count = 0
         for i in range(count):
@@ -297,16 +253,6 @@ class Command(BaseCommand):
                 created_count += 1
 
         return created_count
-
-    def _find_max_location_page_number(self):
-        """Find the highest location page number."""
-        def extract_location_number(title):
-            if '#' in title:
-                parts = title.split('#')
-                if len(parts) > 1:
-                    return int(parts[-1].strip())
-            return None
-        return self._find_max_page_number(LocationPage, '', extract_location_number)
 
     def _generate_location_address(self, city):
         """Generate a random address for the given city."""
@@ -345,8 +291,8 @@ class Command(BaseCommand):
                   'Toronto', 'Mumbai', 'Singapore', 'Dubai', 'Barcelona', 'Amsterdam',
                   'Rome', 'Madrid', 'Seoul', 'San Francisco', 'Chicago', 'Boston']
 
-        start_number = self._find_max_location_page_number() + 1
-        body = self.generate_streamfield(STREAMFIELD_BLOCKS, max_nesting=STREAMFIELD_NESTING)
+        start_number = LocationPage.objects.count() + 1
+        body = self.generate_streamfield(STREAMFIELD_BLOCKS)
 
         created_count = 0
         for i in range(count):
