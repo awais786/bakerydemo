@@ -45,20 +45,14 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f'Could not find home page: {e}. Please set up the site first.'))
             return
 
-        if BLOG_PAGES > 0:
-            self.stdout.write('Creating blog pages...')
-            created = self.create_blog_pages(home_page, BLOG_PAGES)
-            self.stdout.write(f'Created {created} new blog pages')
+        created = self.create_blog_pages(home_page, BLOG_PAGES)
+        self.stdout.write(f'Created {created} new blog pages')
 
-        if BREAD_PAGES > 0:
-            self.stdout.write('Creating bread pages...')
-            created = self.create_bread_pages(home_page, BREAD_PAGES)
-            self.stdout.write(f'Created {created} new bread pages')
+        created = self.create_bread_pages(home_page, BREAD_PAGES)
+        self.stdout.write(f'Created {created} new bread pages')
 
-        if LOCATION_PAGES > 0:
-            self.stdout.write('Creating location pages...')
-            created = self.create_location_pages(home_page, LOCATION_PAGES)
-            self.stdout.write(f'Created {created} new location pages')
+        created = self.create_location_pages(home_page, LOCATION_PAGES)
+        self.stdout.write(f'Created {created} new location pages')
 
         self.stdout.write('Benchmark data generation complete!')
 
