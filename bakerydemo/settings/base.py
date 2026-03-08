@@ -78,6 +78,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.sitemaps",
     "bakerydemo.people",
+    "wagtail_rag",
 ]
 
 MIDDLEWARE = [
@@ -256,3 +257,13 @@ if "CSP_DEFAULT_SRC" in os.environ:
         CSP_FRAME_SRC = os.environ.get("CSP_FRAME_SRC").split(",")
     if "CSP_REPORT_URI" in os.environ:
         CSP_REPORT_URI = os.environ.get("CSP_REPORT_URI")
+
+
+import os
+WAGTAIL_RAG_EMBEDDING_PROVIDER = "openai"
+WAGTAIL_RAG_EMBEDDING_MODEL = "text-embedding-3-small"
+WAGTAIL_RAG_LLM_PROVIDER = "openai"
+WAGTAIL_RAG_MODEL_NAME = "gpt-4o"
+WAGTAIL_RAG_VECTOR_STORE_BACKEND = "faiss"
+WAGTAIL_RAG_CHROMA_PATH = os.path.join(BASE_DIR, "faiss_index")
+WAGTAIL_RAG_RETRIEVE_K = 20
