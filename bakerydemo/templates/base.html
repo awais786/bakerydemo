@@ -57,5 +57,7 @@
         {% block js %}
             <script type="module" src="{% static 'js/main.js' %}"></script>
         {% endblock %}
+
+        {% include "wagtail_rag/chatbox.html" %}
     </body>
 </html>

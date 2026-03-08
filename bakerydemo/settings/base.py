@@ -259,11 +259,30 @@ if "CSP_DEFAULT_SRC" in os.environ:
         CSP_REPORT_URI = os.environ.get("CSP_REPORT_URI")
 
 
-import os
-WAGTAIL_RAG_EMBEDDING_PROVIDER = "openai"
-WAGTAIL_RAG_EMBEDDING_MODEL = "text-embedding-3-small"
-WAGTAIL_RAG_LLM_PROVIDER = "openai"
-WAGTAIL_RAG_MODEL_NAME = "gpt-4o"
-WAGTAIL_RAG_VECTOR_STORE_BACKEND = "faiss"
-WAGTAIL_RAG_CHROMA_PATH = os.path.join(BASE_DIR, "faiss_index")
+WAGTAIL_RAG = {
+    "embedding": {
+        "provider": "openai",
+        "model": "text-embedding-3-small",
+    },
+    "llm": {
+        "provider": "openai",
+        "model": "gpt-4o",
+    },
+    "vector_store": {
+        "backend":    "faiss",
+        "path":       os.path.join(BASE_DIR, "faiss_index"),
+        "collection": "wagtail_rag",
+    },
+    "indexing": {
+        "models": {
+            # Explicit list → index exactly these fields.
+            # "*"           → use Wagtail search_fields automatically.
+            "locations.LocationPage": ["introduction", "body", "address"],
+            "breads.BreadPage":       ["introduction", "body"],
+            "recipes.RecipePage":     ["introduction", "recipe_headline", "backstory", "body"],
+            "blog.BlogPage":          ["introduction", "body"],
+            "people.PersonPage":      "*",  # search_fields: introduction, body
+        },
+    },
+}
 WAGTAIL_RAG_RETRIEVE_K = 20
