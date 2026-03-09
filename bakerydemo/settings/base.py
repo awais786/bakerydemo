@@ -262,11 +262,14 @@ if "CSP_DEFAULT_SRC" in os.environ:
 WAGTAIL_RAG = {
     "embedding": {
         "provider": "openai",
-        "model": "text-embedding-3-small",
+        "model":    "text-embedding-3-small",
     },
     "llm": {
-        "provider": "openai",
-        "model": "gpt-4o",
+        "provider":                "openai",
+        "model":                   "gpt-4o",
+        "max_context_chars":       8000,  # chars of retrieved context sent to the LLM
+        "enable_history":          True,
+        "history_recent_messages": 6,     # recent turns kept verbatim; older turns summarised
     },
     "vector_store": {
         "backend":    "faiss",
@@ -274,15 +277,37 @@ WAGTAIL_RAG = {
         "collection": "wagtail_rag",
     },
     "indexing": {
+        "chunk_size":    1500,
+        "chunk_overlap": 100,
+        # Explicit list → index exactly these fields (use this when search_fields is
+        # incomplete or you want to include fields not registered for full-text search).
+        # "*"           → auto-discover via Wagtail search_fields (SearchField only).
         "models": {
-            # Explicit list → index exactly these fields.
-            # "*"           → use Wagtail search_fields automatically.
+            # introduction is a TextField not in search_fields — must be listed explicitly.
+            # lat_long is coordinates — excluded intentionally.
             "locations.LocationPage": ["introduction", "body", "address"],
-            "breads.BreadPage":       ["introduction", "body"],
-            "recipes.RecipePage":     ["introduction", "recipe_headline", "backstory", "body"],
-            "blog.BlogPage":          ["introduction", "body"],
-            "people.PersonPage":      "*",  # search_fields: introduction, body
+
+            # introduction is a TextField not in search_fields — must be listed explicitly.
+            "breads.BreadPage": ["introduction", "body"],
+
+            # recipe_headline is a RichTextField; introduction is not in search_fields.
+            "recipes.RecipePage": ["introduction", "recipe_headline", "backstory", "body"],
+
+            # introduction is a TextField not in search_fields — must be listed explicitly.
+            "blog.BlogPage": ["introduction", "body"],
+
+            # search_fields covers all content fields: introduction, body.
+            "people.PersonPage": "*",
         },
     },
+    "search": {
+        "k":                   8,     # chunks retrieved per query
+        "max_sources":         3,     # unique source pages shown to the user
+        "use_hybrid":          True,  # combine vector search + Wagtail full-text search
+        "use_query_expansion": True,  # expand query with MultiQueryRetriever
+    },
+    "api": {
+        "max_question_length":   150,  # characters; keeps token costs predictable
+        "rate_limit_per_minute": 30,   # requests per IP per minute; 0 = disabled
+    },
 }
-WAGTAIL_RAG_RETRIEVE_K = 20
