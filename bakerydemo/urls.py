@@ -51,5 +51,6 @@ if settings.DEBUG:
     ]
 
 urlpatterns += [
+    path("", include("wagtail_rag.urls")),  # must come before wagtail_urls
     path("", include(wagtail_urls)),
 ]

@@ -78,6 +78,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.sitemaps",
     "bakerydemo.people",
+    "wagtail_rag",
 ]
 
 MIDDLEWARE = [
@@ -256,3 +257,57 @@ if "CSP_DEFAULT_SRC" in os.environ:
         CSP_FRAME_SRC = os.environ.get("CSP_FRAME_SRC").split(",")
     if "CSP_REPORT_URI" in os.environ:
         CSP_REPORT_URI = os.environ.get("CSP_REPORT_URI")
+
+
+WAGTAIL_RAG = {
+    "embedding": {
+        "provider": "openai",
+        "model":    "text-embedding-3-small",
+    },
+    "llm": {
+        "provider":                "openai",
+        "model":                   "gpt-4o",
+        "max_context_chars":       8000,  # chars of retrieved context sent to the LLM
+        "enable_history":          True,
+        "history_recent_messages": 6,     # recent turns kept verbatim; older turns summarised
+    },
+    "vector_store": {
+        "backend":    "faiss",
+        "path":       os.path.join(BASE_DIR, "faiss_index"),
+        "collection": "wagtail_rag",
+    },
+    "indexing": {
+        "chunk_size":    1500,
+        "chunk_overlap": 100,
+        # Explicit list → index exactly these fields (use this when search_fields is
+        # incomplete or you want to include fields not registered for full-text search).
+        # "*"           → auto-discover via Wagtail search_fields (SearchField only).
+        "models": {
+            # introduction is a TextField not in search_fields — must be listed explicitly.
+            # lat_long is coordinates — excluded intentionally.
+            "locations.LocationPage": ["introduction", "body", "address"],
+
+            # introduction is a TextField not in search_fields — must be listed explicitly.
+            "breads.BreadPage": ["introduction", "body"],
+
+            # recipe_headline is a RichTextField; introduction is not in search_fields.
+            "recipes.RecipePage": ["introduction", "recipe_headline", "backstory", "body"],
+
+            # introduction is a TextField not in search_fields — must be listed explicitly.
+            "blog.BlogPage": ["introduction", "body"],
+
+            # search_fields covers all content fields: introduction, body.
+            "people.PersonPage": "*",
+        },
+    },
+    "search": {
+        "k":                   8,     # chunks retrieved per query
+        "max_sources":         3,     # unique source pages shown to the user
+        "use_hybrid":          True,  # combine vector search + Wagtail full-text search
+        "use_query_expansion": True,  # expand query with MultiQueryRetriever
+    },
+    "api": {
+        "max_question_length":   150,  # characters; keeps token costs predictable
+        "rate_limit_per_minute": 30,   # requests per IP per minute; 0 = disabled
+    },
+}
